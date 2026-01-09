@@ -25,7 +25,6 @@ function calculateFormFactor(formString) {
 }
 
 // Safer Poisson PMF computation (avoids factorial overflow)
-// Uses recurrence: P(k) = P(k-1) * lambda / k
 function poissonPmfSeries(lambda, kMax) {
     lambda = Math.max(0, lambda);
     const pmf = Array(kMax + 1).fill(0);
@@ -57,7 +56,6 @@ const renormalizeMatrix = (matrix) => {
     return matrix;
 };
 
-// Build independent Poisson goal matrix and renormalize (handles truncation)
 const generateMatrix = (lHome, lAway, maxGoals = 15) => {
     lHome = clamp(safeNum(lHome, 0), 0, 10);
     lAway = clamp(safeNum(lAway, 0), 0, 10);
@@ -107,7 +105,7 @@ const cdfFromDist = (dist) => {
         s += dist[k];
         cdf[k] = s;
     }
-    if (cdf.length) cdf[cdf.length - 1] = 1; // snap
+    if (cdf.length) cdf[cdf.length - 1] = 1;
     return cdf;
 };
 
@@ -124,16 +122,12 @@ const convertObjToOdds = (obj) => {
     return out;
 };
 
-// ==================== // MARKET CALCULATORS // ====================
-
-// OU totals with correct push handling on integer lines (conditioned on no push) + quarters
 const calcOUFromDist = (dist, maxLine) => {
     const cdf = cdfFromDist(dist);
-    const base = {}; // keyed by "0.00" etc
+    const base = {};
 
     const ouForLine = (L) => {
         const isInt = Math.abs(L - Math.round(L)) < 1e-9;
-
         if (!isInt) {
             const kUnder = Math.floor(L);
             const pUnder = probLe(cdf, kUnder);
@@ -143,7 +137,6 @@ const calcOUFromDist = (dist, maxLine) => {
                 push: 0
             };
         }
-
         const k = Math.round(L);
         const pPush = probEq(dist, k);
         const denom = 1 - pPush;
@@ -152,9 +145,8 @@ const calcOUFromDist = (dist, maxLine) => {
             under: null,
             push: pPush
         };
-
-        const pOverRaw = probGt(cdf, k); // > k
-        const pUnderRaw = probLt(cdf, k); // < k
+        const pOverRaw = probGt(cdf, k);
+        const pUnderRaw = probLt(cdf, k);
         return {
             over: pOverRaw / denom,
             under: pUnderRaw / denom,
@@ -165,22 +157,18 @@ const calcOUFromDist = (dist, maxLine) => {
     for (let L = 0; L <= maxLine + 1e-9; L += 0.5) base[L.toFixed(2)] = ouForLine(L);
 
     const res = {};
-    // .5 & integer
     for (let L = 0.5; L <= maxLine + 1e-9; L += 0.5) {
         const v = base[L.toFixed(2)];
         if (!v) continue;
         res[`Over ${parseFloat(L)}`] = v.over;
         res[`Under ${parseFloat(L)}`] = v.under;
     }
-    // quarters (avg of neighbors)
     for (let k = 0; k <= Math.floor(maxLine); k++) {
         const a0 = base[(k).toFixed(2)];
         const a05 = base[(k + 0.5).toFixed(2)];
         const a1 = base[(k + 1).toFixed(2)];
-
         const L25 = k + 0.25;
         const L75 = k + 0.75;
-
         if (a0 && a05) {
             res[`Over ${L25}`] = (a0.over + a05.over) / 2;
             res[`Under ${L25}`] = (a0.under + a05.under) / 2;
@@ -258,13 +246,10 @@ const calculateEuropeanHandicap = (matrix, homeHcp, awayHcp = 0) => {
     };
 };
 
-// Poisson OU via CDF with integer push handling (corners/cards)
 const calcPoissonOU = (lambda, maxLine) => {
     lambda = clamp(safeNum(lambda, 0), 0, 50);
-
     const kMax = Math.max(30, Math.ceil(maxLine + lambda + 6 * Math.sqrt(Math.max(lambda, 1e-6))));
     const pmf = poissonPmfSeries(lambda, kMax);
-
     const cdf = [];
     let s = 0;
     for (let k = 0; k <= kMax; k++) {
@@ -272,14 +257,11 @@ const calcPoissonOU = (lambda, maxLine) => {
         cdf[k] = s;
     }
     if (cdf.length) cdf[cdf.length - 1] = 1;
-
     const P_le = (k) => (k < 0 ? 0 : (k >= cdf.length ? 1 : cdf[k]));
     const P_eq = (k) => (k < 0 || k >= pmf.length ? 0 : pmf[k]);
-
     const out = {};
     for (let L = 0.5; L <= maxLine + 1e-9; L += 0.5) {
         const isInt = Math.abs(L - Math.round(L)) < 1e-9;
-
         if (!isInt) {
             const kUnder = Math.floor(L);
             const pUnder = P_le(kUnder);
@@ -305,117 +287,49 @@ const calcPoissonOU = (lambda, maxLine) => {
 
 // ==================== // VALUE DETECTION (PRO) // ====================
 
-// Devig proportional on available outcomes.
-// Returns {devigProb, overround} for a specific selection if possible.
+// Devig proportional. Returns { devigProb, overround }.
+// Only valid if the market subset is complete (sumInv > 0 and sufficient outcomes).
 function devigProportional(bookieMarketObj, selectionKey) {
     if (!bookieMarketObj || !bookieMarketObj[selectionKey]) return null;
-
     let sumInv = 0;
     let selOdd = safeNum(bookieMarketObj[selectionKey], 0);
     if (selOdd <= 1e-12) return null;
 
-    let valid = 0;
+    let validCount = 0;
     for (const k in bookieMarketObj) {
         const o = safeNum(bookieMarketObj[k], 0);
         if (o > 1e-12) {
             sumInv += 1 / o;
-            valid++;
+            validCount++;
         }
     }
-    // Need at least 2 valid outcomes to represent a market
-    if (valid < 2 || sumInv <= 1e-12) return null;
+    if (sumInv <= 1e-12) return null;
 
     const devigProb = (1 / selOdd) / sumInv;
     return {
         devigProb,
-        overround: sumInv
+        overround: sumInv,
+        count: validCount
     };
 }
 
-// sanity: ignore crazy edges caused by market mismatch
-function sanityValueGate({
-    market,
-    fairOdd,
-    bookieOdd,
-    devigProb,
-    fairProb
-}) {
-    if (!fairOdd || !bookieOdd) return false;
-
-    // very extreme "certain" lines are usually mismatches
-    if (fairProb > 0.97 && (market || "").toLowerCase().includes("handicap")) return false;
-
-    // ignore if any odds nonsense
-    if (bookieOdd < 1.01 || fairOdd < 1.01) return false;
-
-    // if devigProb exists, require fairProb meaningfully > devigProb (small buffer)
-    if (Number.isFinite(devigProb)) {
-        if (!(fairProb > devigProb + 0.02)) return false; // +2% absolute
-    }
-
-    return true;
-}
-
-// detect if a handicap market looks "European 3-way" vs "2-way Asian"
-function isEuropeanHandicap3Way(bookieHandicapObj) {
-    if (!bookieHandicapObj) return false;
-    const keys = Object.keys(bookieHandicapObj);
-    // our european keys are like "1 (-1)", "X (-1)", "2 (-1)" or similar
-    const has1 = keys.some(k => /^\s*1\s*\(/.test(k));
-    const hasX = keys.some(k => /^\s*X\s*\(/.test(k));
-    const has2 = keys.some(k => /^\s*2\s*\(/.test(k));
-    if (has1 && hasX && has2) return true;
-
-    // if it uses "Home/Draw/Away" also 3-way
-    const hasHome = keys.some(k => /^\s*Home\s*\(/.test(k) || /Home [+-]\d/.test(k));
-    const hasDraw = keys.some(k => /^\s*Draw\s*\(/.test(k) || /Draw [+-]\d/.test(k));
-    const hasAway = keys.some(k => /^\s*Away\s*\(/.test(k) || /Away [+-]\d/.test(k));
-    return hasHome && hasDraw && hasAway;
+// 1) Robust Team Name Extraction
+function getTeamName(teamObj) {
+    if (!teamObj) return "Unknown";
+    return teamObj.squad || teamObj.Squad || teamObj.team_name || teamObj.name || teamObj.team || teamObj.Team || "Unknown";
 }
 
 // ==================== // OUTPUT CLEANER // ====================
 
-function buildCleanOutput(data, predictions, valueBets) {
-    const homeName = data?.home?.team_name || data?.home?.name || data?.home?.team || data?.home?.Team || "Home";
-    const awayName = data?.away?.team_name || data?.away?.name || data?.away?.team || data?.away?.Team || "Away";
-
-    // small “top markets” summary (interpretable)
-    const p1x2 = predictions?.probs?.["1X2"] || null;
-
-    const topMarkets = [];
-    if (p1x2) {
-        const homeP = p1x2["1"];
-        const drawP = p1x2["X"];
-        const awayP = p1x2["2"];
-        const best = [{
-                k: `${homeName} win`,
-                p: homeP
-            },
-            {
-                k: "Draw",
-                p: drawP
-            },
-            {
-                k: `${awayName} win`,
-                p: awayP
-            },
-        ].filter(x => Number.isFinite(x.p)).sort((a, b) => b.p - a.p)[0];
-        if (best) topMarkets.push({
-            market: "1X2 (model)",
-            selection: best.k,
-            prob_percent: pct1(best.p)
-        });
-    }
-
+function buildCleanOutput(homeName, awayName, topMarkets, valueBets) {
     // sort value bets by edge descending
-    const sortedVB = (valueBets || []).slice().sort((a, b) => (b.edge || 0) - (a.edge || 0));
+    const sortedVB = (valueBets || []).slice().sort((a, b) => (parseFloat(b.edge_percent) || 0) - (parseFloat(a.edge_percent) || 0));
 
     return {
         match: {
             home: homeName,
             away: awayName
         },
-        lambdas: predictions?.lambdas || null,
         top_markets: topMarkets,
         value_bets: sortedVB.map(v => ({
             market: v.market,
@@ -427,15 +341,13 @@ function buildCleanOutput(data, predictions, valueBets) {
             fair_prob_percent: v.fair_prob_percent ?? null,
             overround: v.overround ?? null,
         })),
-        // If you want: keep fair odds. Otherwise comment this line.
-        // fair_odds: predictions?.fair_odds || null,
     };
 }
 
 // ==================== // MAIN LOGIC // ====================
 
 const results = [];
-// 'items' is the global array in n8n Code node
+
 for (const item of items) {
     const data = item.json;
     if (!data?.home || !data?.away) {
@@ -445,8 +357,10 @@ for (const item of items) {
 
     const home = data.home;
     const away = data.away;
+    const homeName = getTeamName(home);
+    const awayName = getTeamName(away);
 
-    // --- A) Lambdas goals
+    // --- A) Lambdas
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
@@ -458,7 +372,7 @@ for (const item of items) {
     const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
     const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
 
-    // --- B) HT splits (auto-detect base 0-1 vs 0-100)
+    // --- B) HT splits
     let homeHTPct = safeNum(home?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_31-45_percentage"], 0);
@@ -490,7 +404,7 @@ for (const item of items) {
 
     const margFT = getMarginals(matrixMatch);
 
-    // --- D) Market probabilities
+    // --- D) Probabilities
     const probs1X2 = calc1X2(matrixMatch);
     const probs1X2_1H = calc1X2(matrixHT);
     const probs1X2_2H = calc1X2(matrix2H);
@@ -503,7 +417,6 @@ for (const item of items) {
     const probsDNB_1H = calcDNB(probs1X2_1H);
     const probsDNB_2H = calcDNB(probs1X2_2H);
 
-    // HT/FT
     const probsHTFT = (() => {
         const mapping = {
             "1": "Home",
@@ -556,7 +469,7 @@ for (const item of items) {
     const cleanSheets = calcCleanSheet(matrixMatch);
     const winToNil = calcWinToNil(matrixMatch);
 
-    // Corners & Cards lambdas
+    // Corners/Cards
     const lambdaCornersHome = clamp((safeNum(home["PassTypes_CK"], 0) + safeNum(away?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
@@ -572,7 +485,6 @@ for (const item of items) {
     const lambdaCardsTotal = clamp(lambdaCardsHome + lambdaCardsAway, 0.1, 15);
     const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 6.5);
 
-    // Combos
     const comboBTTS = {
         "Home/Yes": sumProb(matrixMatch, (h, a) => h > a && h > 0 && a > 0),
         "Draw/Yes": sumProb(matrixMatch, (h, a) => h === a && h > 0 && a > 0),
@@ -591,7 +503,6 @@ for (const item of items) {
         "Away/Under 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) < 2.5),
     };
 
-    // Fair odds
     const fairOdds = {
         "1X2": convertObjToOdds(probs1X2),
         "1X2_1H": convertObjToOdds(probs1X2_1H),
@@ -636,24 +547,13 @@ for (const item of items) {
         "Combo_Result_Total": convertObjToOdds(comboResultTotal),
     };
 
-    // Keep probs for summary only (not full dump)
     const predictions = {
-        lambdas: {
-            goals_home: round2(lambdaGoalsHome),
-            goals_away: round2(lambdaGoalsAway),
-            goals_home_HT: round2(lambdaGoalsHomeHT),
-            goals_away_HT: round2(lambdaGoalsAwayHT),
-            corners_total: round2(lambdaCornersTotal),
-            cards_total: round2(lambdaCardsTotal),
-        },
-        probs: {
-            "1X2": probs1X2
-        },
+        lambdas: {},
+        probs: { "1X2": probs1X2 },
         fair_odds: fairOdds,
     };
 
-    // ==================== // VALUE DETECTION (PRO) // ====================
-    const valueBets = [];
+    let valueBets = [];
 
     if (data.bookmaker_odds) {
         const bookie = data.bookmaker_odds;
@@ -661,43 +561,35 @@ for (const item of items) {
         const pushValue = (market, outcome, fairOdd, bookieOdd, devig) => {
             const b = safeNum(bookieOdd, 0);
             const f = safeNum(fairOdd, 0);
-            if (b <= 1e-12 || f <= 1e-12) return;
+            if (b <= 1.01 || f <= 1.01) return;
 
             const fairProb = 1 / f;
-            const edge = (b / f) - 1;
+            const marketProb = devig?.devigProb ?? (1 / b);
 
-            const devigProb = devig?.devigProb;
-            const ok = sanityValueGate({
+            if (!marketProb || marketProb <= 1e-9) return;
+
+            const edge = (fairProb / marketProb) - 1;
+
+            if (edge <= 0.10 || edge > 0.50) return;
+
+            valueBets.push({
                 market,
-                fairOdd: f,
-                bookieOdd: b,
-                devigProb,
-                fairProb
+                outcome,
+                fair_odd: f,
+                bookie_odd: b,
+                edge_percent: (edge * 100).toFixed(1) + "%",
+                devig_prob_percent: devig?.devigProb ? (devig.devigProb * 100).toFixed(1) + "%" : null,
+                fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
+                overround: devig?.overround ? round2(devig.overround) : null,
             });
-            if (!ok) return;
-
-            // thresholds: Edge must be > 10% AND <= 50%
-            if (edge > 0.10 && edge <= 0.50) {
-                valueBets.push({
-                    market,
-                    outcome,
-                    fair_odd: f,
-                    bookie_odd: b,
-                    edge,
-                    edge_percent: (edge * 100).toFixed(1) + "%",
-                    devig_prob_percent: Number.isFinite(devigProb) ? (devigProb * 100).toFixed(1) + "%" : null,
-                    fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
-                    overround: devig?.overround ? round2(devig.overround) : null,
-                });
-            }
         };
 
-        // 1X2, DNB, BTTS etc (simple)
-        const checkSimpleMarket = (marketKey, outcomes) => {
+        const check3Way = (marketKey, outcomes) => {
             const bM = bookie[marketKey];
             const fM = fairOdds[marketKey];
             if (!bM || !fM) return;
-
+            const hasAll = outcomes.every(k => bM[k]);
+            if (!hasAll) return;
             outcomes.forEach(out => {
                 const fOdd = fM[out];
                 const bOdd = bM[out];
@@ -706,45 +598,47 @@ for (const item of items) {
                 pushValue(marketKey, out, fOdd, bOdd, devig);
             });
         };
+        check3Way("1X2", ["1", "X", "2"]);
+        check3Way("1X2_1H", ["1", "X", "2"]);
+        check3Way("1X2_2H", ["1", "X", "2"]);
 
-        checkSimpleMarket("1X2", ["1", "X", "2"]);
-        checkSimpleMarket("1X2_1H", ["1", "X", "2"]);
-        checkSimpleMarket("1X2_2H", ["1", "X", "2"]);
-        checkSimpleMarket("DNB", ["1", "2"]);
-        checkSimpleMarket("DNB_1H", ["1", "2"]);
-        checkSimpleMarket("DNB_2H", ["1", "2"]);
-        checkSimpleMarket("BTTS", ["Yes", "No"]);
-        checkSimpleMarket("BTTS_1H", ["Yes", "No"]);
-        checkSimpleMarket("BTTS_2H", ["Yes", "No"]);
-        checkSimpleMarket("clean_sheet_home", ["Yes", "No"]);
-        checkSimpleMarket("clean_sheet_away", ["Yes", "No"]);
-        checkSimpleMarket("WinToNil", ["Home", "Away", "No"]);
-        // checkSimpleMarket("DoubleChance", ["Home/Draw", "Home/Away", "Draw/Away"]); // handled specially below
+        const check2Way = (marketKey, outcomes) => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+            const hasAll = outcomes.every(k => bM[k]);
+            if (!hasAll) return;
+            outcomes.forEach(out => {
+                const fOdd = fM[out];
+                const bOdd = bM[out];
+                if (!fOdd || !bOdd) return;
+                const devig = devigProportional(bM, out);
+                pushValue(marketKey, out, fOdd, bOdd, devig);
+            });
+        };
+        check2Way("DNB", ["1", "2"]);
+        check2Way("DNB_1H", ["1", "2"]);
+        check2Way("DNB_2H", ["1", "2"]);
+        check2Way("BTTS", ["Yes", "No"]);
+        check2Way("BTTS_1H", ["Yes", "No"]);
+        check2Way("BTTS_2H", ["Yes", "No"]);
+        check2Way("clean_sheet_home", ["Yes", "No"]);
+        check2Way("clean_sheet_away", ["Yes", "No"]);
+        if (bookie["WinToNil"] && bookie["WinToNil"]["No"]) check3Way("WinToNil", ["Home", "Away", "No"]);
 
-        // DoubleChance mapping (No Devigging)
         if (bookie["DoubleChance"] && fairOdds["DoubleChance"]) {
             const bM = bookie["DoubleChance"];
             const fM = fairOdds["DoubleChance"];
-            const map = {
-                "Home/Draw": fM["1X"],
-                "Home/Away": fM["12"],
-                "Draw/Away": fM["X2"],
-            };
+            const map = { "Home/Draw": fM["1X"], "Home/Away": fM["12"], "Draw/Away": fM["X2"] };
             for (const k in map) {
-                if (map[k] && bM[k]) {
-                    // Pass null for devig to skip devig sanity checks and rely on raw comparison
-                    pushValue("DoubleChance", k, map[k], bM[k], null);
-                }
+                if (map[k] && bM[k]) pushValue("DoubleChance", k, map[k], bM[k], null);
             }
         }
 
-        // OU style markets: evaluate per "Over X" / "Under X"
         const checkOU = (marketKey) => {
             const bM = bookie[marketKey];
             const fM = fairOdds[marketKey];
             if (!bM || !fM) return;
-
-            // try to pair over/under for same line
             const lines = new Set();
             for (const k in bM) {
                 const m = String(k).match(/^(Over|Under)\s+(.+)$/i);
@@ -754,86 +648,62 @@ for (const item of items) {
                 const overKey = `Over ${line}`;
                 const underKey = `Under ${line}`;
                 if (!bM[overKey] || !bM[underKey]) return;
-                const mini = {
-                    [overKey]: bM[overKey],
-                    [underKey]: bM[underKey]
-                };
-
+                const mini = { [overKey]: bM[overKey], [underKey]: bM[underKey] };
                 if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigProportional(mini, overKey));
                 if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigProportional(mini, underKey));
             });
         };
-
         ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
 
-        // Handicap: Segmentation by line + Key Mapping
-        if (bookie["Handicap"] && fairOdds["Handicap"] && isEuropeanHandicap3Way(bookie["Handicap"])) {
+        if (bookie["Handicap"] && fairOdds["Handicap"]) {
             const bM = bookie["Handicap"];
             const fM = fairOdds["Handicap"];
-
-            // 1. Group by line value (e.g. "1")
-            // Bookie keys might look like "1 (-1)", "X (-1)", "2 (+1)" or "2 (-1)" depending on format
-
-            const groups = {}; // Key: "-1" -> { "1 (-1)": odd, "X (-1)": odd, "2 (+1)": odd }
-
+            const groups = {};
             for (const k in bM) {
-                // Regex to capture the number in parens: "1 (-1)", "2 (+1)", "Home -1"
-                const m = k.match(/([+-]?\d+(\.\d+)?)\)$/);
-                if (m) {
-                    const hcpVal = parseFloat(m[1]); // e.g. -1, +1
-                    // We want to group "Home -1" (val -1), "Tie -1" (val -1), "Away +1" (val +1).
-                    // Note: Away +1 implies Home -1 line.
-                    // So if we see +1 on Away, the "line" is -1.
-                    // If we see -1 on Away, the "line" is +1.
-                    // Let's define the "Line" as the Home Handicap.
+                const m = k.match(/([+-]?\d+(\.\d+)?)\)?$/);
+                if (!m) continue;
 
-                    let line = null;
-                    if (k.includes("1 (") || k.includes("Home") || k.includes("X (") || k.includes("Draw") || k.includes("Tie")) {
-                            line = hcpVal;
-                    } else if (k.includes("2 (") || k.includes("Away")) {
-                            line = -hcpVal;
-                    }
+                const kTrim = k.trim();
+                let outcomeType = null;
 
-                    if (line !== null) {
-                        if (!groups[line]) groups[line] = {};
-                        groups[line][k] = bM[k];
-                    }
+                if (/^1\b/.test(kTrim) || /^Home\b/i.test(kTrim)) outcomeType = "1";
+                else if (/^X\b/.test(kTrim) || /^Draw\b/i.test(kTrim) || /^Tie\b/i.test(kTrim)) outcomeType = "X";
+                else if (/^2\b/.test(kTrim) || /^Away\b/i.test(kTrim)) outcomeType = "2";
+
+                if (!outcomeType) continue;
+
+                let val = parseFloat(m[1]);
+                let line = null;
+
+                if (outcomeType === "1" || outcomeType === "X") {
+                    line = val;
+                } else if (outcomeType === "2") {
+                    line = -val;
+                }
+
+                if (line !== null) {
+                    if (!groups[line]) groups[line] = {};
+                    groups[line][k] = bM[k];
                 }
             }
-
-            // 2. Process each group
             for (const lineStr in groups) {
                 const subMarket = groups[lineStr];
+                if (Object.keys(subMarket).length !== 3) continue;
                 const line = parseFloat(lineStr);
-
-                // Construct our internal keys for this line
-                // We generated keys like "1 (-1)", "X (-1)", "2 (-1)".
-                // Where "2 (-1)" meant the 3rd outcome of the (-1) simulation.
                 const sign = line > 0 ? "+" : "";
                 const internalSuffix = `(${sign}${line})`;
                 const intKey1 = `1 ${internalSuffix}`;
                 const intKeyX = `X ${internalSuffix}`;
                 const intKey2 = `2 ${internalSuffix}`;
-
-                // Now map Bookie keys in subMarket to these internal keys
-                // Bookie "1 (-1)" matches intKey1
-                // Bookie "X (-1)" matches intKeyX
-                // Bookie "2 (+1)" matches intKey2
-
                 for (const bk in subMarket) {
                     let matchedFairOdd = null;
+                    const kTrim = bk.trim();
 
-                    // normalize bk to see what it is
-                    if (bk.includes("1 (") || bk.includes("Home")) {
-                            matchedFairOdd = fM[intKey1];
-                    } else if (bk.includes("X (") || bk.includes("Draw") || bk.includes("Tie")) {
-                            matchedFairOdd = fM[intKeyX];
-                    } else if (bk.includes("2 (") || bk.includes("Away")) {
-                            matchedFairOdd = fM[intKey2];
-                    }
+                    if (/^1\b/.test(kTrim) || /^Home\b/i.test(kTrim)) matchedFairOdd = fM[intKey1];
+                    else if (/^X\b/.test(kTrim) || /^Draw\b/i.test(kTrim) || /^Tie\b/i.test(kTrim)) matchedFairOdd = fM[intKeyX];
+                    else if (/^2\b/.test(kTrim) || /^Away\b/i.test(kTrim)) matchedFairOdd = fM[intKey2];
 
                     if (matchedFairOdd) {
-                        // Devig using the subMarket
                         const devig = devigProportional(subMarket, bk);
                         pushValue("Handicap", bk, matchedFairOdd, subMarket[bk], devig);
                     }
@@ -841,7 +711,6 @@ for (const item of items) {
             }
         }
 
-        // Complex markets (HT/FT + combos): devig on whatever outcomes exist, but sanity-gated
         ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
             const bM = bookie[marketKey];
             const fM = fairOdds[marketKey];
@@ -853,8 +722,28 @@ for (const item of items) {
         });
     }
 
-    // ==================== // CLEAN OUTPUT ONLY // ====================
-    const cleanOutput = buildCleanOutput(data, predictions, valueBets);
+    const hasTotalHomeUnder05 = valueBets.some(v => v.market === "Total_Home" && v.outcome === "Under 0.5");
+    const hasTotalAwayUnder05 = valueBets.some(v => v.market === "Total_Away" && v.outcome === "Under 0.5");
+
+    if (hasTotalHomeUnder05) {
+        valueBets = valueBets.filter(v => !((v.market === "clean_sheet_away" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Away")));
+    }
+    if (hasTotalAwayUnder05) {
+        valueBets = valueBets.filter(v => !((v.market === "clean_sheet_home" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Home")));
+    }
+
+    const topMarkets = [];
+    const p1x2 = predictions.probs["1X2"];
+    if (p1x2) {
+        const best = [
+            { k: `${homeName} win`, p: p1x2["1"] },
+            { k: "Draw", p: p1x2["X"] },
+            { k: `${awayName} win`, p: p1x2["2"] },
+        ].sort((a, b) => b.p - a.p)[0];
+        if (best) topMarkets.push({ market: "1X2 (model)", selection: best.k, prob_percent: pct1(best.p) });
+    }
+
+    const cleanOutput = buildCleanOutput(homeName, awayName, topMarkets, valueBets);
     results.push({ json: cleanOutput });
 }
 
