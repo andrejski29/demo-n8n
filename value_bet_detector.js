@@ -319,7 +319,8 @@ function buildCleanOutput(homeName, awayName, topMarkets, valueBets) {
             outcome: v.outcome,
             fair_odd: v.fair_odd,
             bookie_odd: v.bookie_odd,
-            edge_percent: v.edge_percent,
+            edge_percent: v.edge_percent, // Now Betable Edge
+            market_edge_percent: v.market_edge_percent, // Devig Edge
             devig_prob_percent: v.devig_prob_percent ?? null,
             fair_prob_percent: v.fair_prob_percent ?? null,
             overround: v.overround ?? null,
@@ -343,6 +344,7 @@ for (const item of items) {
     const homeName = getTeamName(home);
     const awayName = getTeamName(away);
 
+    // ... (calculations same as before) ...
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
@@ -360,7 +362,7 @@ for (const item of items) {
 
     let awayHTPct = safeNum(away?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
         safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
-        safeNum(away?.team_season?.["goals_for_minute_31-45_percentage"], 0);
+        safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0);
 
     if (homeHTPct > 1.5) homeHTPct /= 100;
     if (awayHTPct > 1.5) awayHTPct /= 100;
@@ -541,10 +543,11 @@ for (const item of items) {
             const f = safeNum(fairOdd, 0);
             if (b <= 1.01 || f <= 1.01) return;
 
+            // Betability Gate (Mandatory)
+            if (b <= f + 0.01) return;
+
             const fStr = f.toFixed(2);
             if (seenFairOdds.has(fStr)) {
-                // If the same fair odd appears again, it might be a mapping issue (or just coincidence)
-                // Log strictly if it is suspicious (different market/outcome, same exact fair odd)
                 const prev = seenFairOdds.get(fStr);
                 if (prev !== `${market}:${outcome}`) {
                     console.log(`DEBUG: Duplicate Fair Odd ${fStr} seen in ${market}:${outcome}. Prev: ${prev}`);
@@ -557,21 +560,28 @@ for (const item of items) {
             const impliedProb = 1 / b;
             const marketProb = devig?.devigProb ?? impliedProb;
 
+            // EV Edge (Betable)
+            const evEdge = (b / f) - 1;
+
+            // Market Edge (Devigged)
+            let marketEdge = null;
+            if (marketProb > 1e-9) {
+                marketEdge = (fairProb / marketProb) - 1;
+            }
+
             // LOGS
-            console.log(`MARKET: ${market} OUTCOME: ${outcome} F_ODD: ${f} B_ODD: ${b} F_PROB: ${round2(fairProb)} M_PROB: ${round2(marketProb)}`);
+            console.log(`MARKET: ${market} OUTCOME: ${outcome} F_ODD: ${f} B_ODD: ${b} F_PROB: ${round2(fairProb)} M_PROB: ${round2(marketProb)} EV_EDGE: ${(evEdge*100).toFixed(1)}%`);
 
-            if (!marketProb || marketProb <= 1e-9) return;
-
-            const edge = (fairProb / marketProb) - 1;
-
-            if (edge <= 0.10 || edge > 0.50) return;
+            // Filters on EV Edge
+            if (evEdge <= 0.10 || evEdge > 0.50) return;
 
             valueBets.push({
                 market,
                 outcome,
                 fair_odd: f,
                 bookie_odd: b,
-                edge_percent: (edge * 100).toFixed(1) + "%",
+                edge_percent: (evEdge * 100).toFixed(1) + "%",
+                market_edge_percent: marketEdge !== null ? (marketEdge * 100).toFixed(1) + "%" : null,
                 devig_prob_percent: devig?.devigProb ? (devig.devigProb * 100).toFixed(1) + "%" : null,
                 fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
                 overround: devig?.overround ? round2(devig.overround) : null,
