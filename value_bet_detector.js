@@ -24,7 +24,6 @@ function calculateFormFactor(formString) {
     return 0.8 + ((pts / 15) * 0.4); // 0.8..1.2
 }
 
-// Safer Poisson PMF computation (avoids factorial overflow)
 function poissonPmfSeries(lambda, kMax) {
     lambda = Math.max(0, lambda);
     const pmf = Array(kMax + 1).fill(0);
@@ -122,8 +121,6 @@ const convertObjToOdds = (obj) => {
     return out;
 };
 
-// ==================== // MARKET CALCULATORS // ====================
-
 const calcOUFromDist = (dist, maxLine) => {
     const cdf = cdfFromDist(dist);
     const base = {};
@@ -165,8 +162,6 @@ const calcOUFromDist = (dist, maxLine) => {
         res[`Over ${parseFloat(L)}`] = v.over;
         res[`Under ${parseFloat(L)}`] = v.under;
     }
-    // REMOVED QUARTER LINE GENERATION
-
     return res;
 };
 
@@ -271,7 +266,6 @@ const calcPoissonOU = (lambda, maxLine) => {
             }
         }
     }
-    // REMOVED QUARTER LINE GENERATION HERE AS WELL (It wasn't there before, but ensuring)
     return out;
 };
 
@@ -292,6 +286,11 @@ function devigProportional(bookieMarketObj, selectionKey) {
         }
     }
     if (sumInv <= 1e-12) return null;
+
+    // DEBUG HIGH OVERROUND
+    if (sumInv > 1.5 && validCount < 10) {
+        console.log(`High Overround ${sumInv} in group:`, bookieMarketObj);
+    }
 
     const devigProb = (1 / selOdd) / sumInv;
     return {
@@ -344,7 +343,6 @@ for (const item of items) {
     const homeName = getTeamName(home);
     const awayName = getTeamName(away);
 
-    // ... (calculations same as before) ...
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
@@ -533,6 +531,7 @@ for (const item of items) {
     };
 
     let valueBets = [];
+    const seenFairOdds = new Map();
 
     if (data.bookmaker_odds) {
         const bookie = data.bookmaker_odds;
@@ -542,8 +541,24 @@ for (const item of items) {
             const f = safeNum(fairOdd, 0);
             if (b <= 1.01 || f <= 1.01) return;
 
+            const fStr = f.toFixed(2);
+            if (seenFairOdds.has(fStr)) {
+                // If the same fair odd appears again, it might be a mapping issue (or just coincidence)
+                // Log strictly if it is suspicious (different market/outcome, same exact fair odd)
+                const prev = seenFairOdds.get(fStr);
+                if (prev !== `${market}:${outcome}`) {
+                    console.log(`DEBUG: Duplicate Fair Odd ${fStr} seen in ${market}:${outcome}. Prev: ${prev}`);
+                }
+            } else {
+                seenFairOdds.set(fStr, `${market}:${outcome}`);
+            }
+
             const fairProb = 1 / f;
-            const marketProb = devig?.devigProb ?? (1 / b);
+            const impliedProb = 1 / b;
+            const marketProb = devig?.devigProb ?? impliedProb;
+
+            // LOGS
+            console.log(`MARKET: ${market} OUTCOME: ${outcome} F_ODD: ${f} B_ODD: ${b} F_PROB: ${round2(fairProb)} M_PROB: ${round2(marketProb)}`);
 
             if (!marketProb || marketProb <= 1e-9) return;
 
@@ -625,11 +640,8 @@ for (const item of items) {
             }
             lines.forEach(lineStr => {
                 const line = parseFloat(lineStr);
-                // Strict Asian Quarter filtering:
-                // Only allow lines ending in .0 or .5
-                // x.0 % 0.5 == 0.  x.5 % 0.5 == 0.
-                // x.25 % 0.5 == 0.25.
-                if (Math.abs(line % 0.5) > 1e-9) return;
+                // Strict integer filtering: .5 only
+                if (Math.abs((line % 1) - 0.5) > 1e-9) return;
 
                 const overKey = `Over ${lineStr}`;
                 const underKey = `Under ${lineStr}`;
@@ -674,7 +686,6 @@ for (const item of items) {
             }
             for (const lineStr in groups) {
                 const subMarket = groups[lineStr];
-                // Strict 3-way check drops Asian 2-way handicap lines
                 if (Object.keys(subMarket).length !== 3) continue;
                 const line = parseFloat(lineStr);
                 const sign = line > 0 ? "+" : "";
