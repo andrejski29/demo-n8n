@@ -434,431 +434,428 @@ function buildCleanOutput(data, predictions, valueBets) {
 
 // ==================== // MAIN LOGIC // ====================
 
-function processItems(items) {
-    const results = [];
-    for (const item of items) {
-        const data = item.json;
-        if (!data?.home || !data?.away) {
-            results.push(item);
-            continue;
-        }
-
-        const home = data.home;
-        const away = data.away;
-
-        // --- A) Lambdas goals
-        const hAttack = safeNum(home["Shooting_npxG"], 0);
-        const aAttack = safeNum(away["Shooting_npxG"], 0);
-        const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
-        const hOppXG = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
-
-        const homeFormFactor = calculateFormFactor(home?.team_season?.form);
-        const awayFormFactor = calculateFormFactor(away?.team_season?.form);
-
-        const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
-        const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
-
-        // --- B) HT splits (auto-detect base 0-1 vs 0-100)
-        let homeHTPct = safeNum(home?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
-            safeNum(home?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
-            safeNum(home?.team_season?.["goals_for_minute_31-45_percentage"], 0);
-
-        let awayHTPct = safeNum(away?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
-            safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
-            safeNum(away?.team_season?.["goals_for_minute_31-45_percentage"], 0);
-
-        if (homeHTPct > 1.5) homeHTPct /= 100;
-        if (awayHTPct > 1.5) awayHTPct /= 100;
-
-        const homeHT = clamp(homeHTPct, 0.05, 0.95);
-        const awayHT = clamp(awayHTPct, 0.05, 0.95);
-
-        const lambdaGoalsHomeHT = lambdaGoalsHome * homeHT;
-        const lambdaGoalsAwayHT = lambdaGoalsAway * awayHT;
-        const lambdaGoalsHome2H = lambdaGoalsHome * (1 - homeHT);
-        const lambdaGoalsAway2H = lambdaGoalsAway * (1 - awayHT);
-
-        // --- C) Matrices
-        const MAX_GOALS = 15;
-        const matrixMatch = generateMatrix(lambdaGoalsHome, lambdaGoalsAway, MAX_GOALS);
-        const matrixHT = generateMatrix(lambdaGoalsHomeHT, lambdaGoalsAwayHT, MAX_GOALS);
-        const matrix2H = generateMatrix(lambdaGoalsHome2H, lambdaGoalsAway2H, MAX_GOALS);
-
-        const totalDistFT = getTotalDist(matrixMatch);
-        const totalDistHT = getTotalDist(matrixHT);
-        const totalDist2H = getTotalDist(matrix2H);
-
-        const margFT = getMarginals(matrixMatch);
-
-        // --- D) Market probabilities
-        const probs1X2 = calc1X2(matrixMatch);
-        const probs1X2_1H = calc1X2(matrixHT);
-        const probs1X2_2H = calc1X2(matrix2H);
-
-        const prob1X = probs1X2["1"] + probs1X2["X"];
-        const probX2 = probs1X2["X"] + probs1X2["2"];
-        const prob12 = probs1X2["1"] + probs1X2["2"];
-
-        const probsDNB = calcDNB(probs1X2);
-        const probsDNB_1H = calcDNB(probs1X2_1H);
-        const probsDNB_2H = calcDNB(probs1X2_2H);
-
-        // HT/FT
-        const probsHTFT = (() => {
-            const mapping = {
-                "1": "Home",
-                "X": "Draw",
-                "2": "Away"
-            };
-            const expanded = {};
-            for (let h1 = 0; h1 < MAX_GOALS; h1++) {
-                for (let a1 = 0; a1 < MAX_GOALS; a1++) {
-                    const pHT = matrixHT[h1][a1];
-                    const htRes = h1 > a1 ? "1" : (h1 === a1 ? "X" : "2");
-                    for (let h2 = 0; h2 < MAX_GOALS; h2++) {
-                        for (let a2 = 0; a2 < MAX_GOALS; a2++) {
-                            const p2 = matrix2H[h2][a2];
-                            const ftH = h1 + h2;
-                            const ftA = a1 + a2;
-                            const ftRes = ftH > ftA ? "1" : (ftH === ftA ? "X" : "2");
-                            const key = `${mapping[htRes]}/${mapping[ftRes]}`;
-                            expanded[key] = (expanded[key] || 0) + (pHT * p2);
-                        }
-                    }
-                }
-            }
-            return expanded;
-        })();
-
-        const probsOU_Match = calcOUFromDist(totalDistFT, 7.5);
-        const probsOU_1H = calcOUFromDist(totalDistHT, 4.5);
-        const probsOU_2H = calcOUFromDist(totalDist2H, 4.5);
-
-        const probsBTTS = calcBTTS(matrixMatch);
-        const probsBTTS_1H = calcBTTS(matrixHT);
-        const probsBTTS_2H = calcBTTS(matrix2H);
-
-        // Handicap European (3-way)
-        const handicapLines = [-3, -2, -1, 1, 2, 3];
-        const probsHandicap = {};
-        for (const hcp of handicapLines) {
-            const res = calculateEuropeanHandicap(matrixMatch, hcp, 0);
-            const sign = hcp > 0 ? "+" : "";
-            const key = `(${sign}${hcp})`;
-            probsHandicap[`1 ${key}`] = res["1"];
-            probsHandicap[`X ${key}`] = res["X"];
-            probsHandicap[`2 ${key}`] = res["2"];
-        }
-
-        const probsTotalHome = calcTeamTotalsOU(margFT.home, 4.5);
-        const probsTotalAway = calcTeamTotalsOU(margFT.away, 4.5);
-
-        const cleanSheets = calcCleanSheet(matrixMatch);
-        const winToNil = calcWinToNil(matrixMatch);
-
-        // Corners & Cards lambdas
-        const lambdaCornersHome = clamp((safeNum(home["PassTypes_CK"], 0) + safeNum(away?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
-        const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
-        const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
-        const probsCornersOU = calcPoissonOU(lambdaCornersTotal, 14.5);
-
-        const homeCardPoints = safeNum(home["Standard_Stats_CrdY"], 0) + 2 * safeNum(home["Standard_Stats_CrdR"], 0);
-        const awayCardPoints = safeNum(away["Standard_Stats_CrdY"], 0) + 2 * safeNum(away["Standard_Stats_CrdR"], 0);
-        const homeOppCardPoints = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
-        const awayOppCardPoints = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
-
-        const lambdaCardsHome = clamp((homeCardPoints + awayOppCardPoints) / 2, 0.05, 10);
-        const lambdaCardsAway = clamp((awayCardPoints + homeOppCardPoints) / 2, 0.05, 10);
-        const lambdaCardsTotal = clamp(lambdaCardsHome + lambdaCardsAway, 0.1, 15);
-        const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 6.5);
-
-        // Combos
-        const comboBTTS = {
-            "Home/Yes": sumProb(matrixMatch, (h, a) => h > a && h > 0 && a > 0),
-            "Draw/Yes": sumProb(matrixMatch, (h, a) => h === a && h > 0 && a > 0),
-            "Away/Yes": sumProb(matrixMatch, (h, a) => a > h && h > 0 && a > 0),
-            "Home/No": sumProb(matrixMatch, (h, a) => h > a && (h === 0 || a === 0)),
-            "Draw/No": sumProb(matrixMatch, (h, a) => h === a && (h === 0 || a === 0)),
-            "Away/No": sumProb(matrixMatch, (h, a) => a > h && (h === 0 || a === 0)),
-        };
-
-        const comboResultTotal = {
-            "Home/Over 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) > 2.5),
-            "Draw/Over 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) > 2.5),
-            "Away/Over 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) > 2.5),
-            "Home/Under 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) < 2.5),
-            "Draw/Under 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) < 2.5),
-            "Away/Under 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) < 2.5),
-        };
-
-        // Fair odds
-        const fairOdds = {
-            "1X2": convertObjToOdds(probs1X2),
-            "1X2_1H": convertObjToOdds(probs1X2_1H),
-            "1X2_2H": convertObjToOdds(probs1X2_2H),
-            "DoubleChance": {
-                "1X": toOdds(prob1X),
-                "X2": toOdds(probX2),
-                "12": toOdds(prob12)
-            },
-            "DNB": {
-                "1": toOdds(probsDNB["1"]),
-                "2": toOdds(probsDNB["2"])
-            },
-            "DNB_1H": {
-                "1": toOdds(probsDNB_1H["1"]),
-                "2": toOdds(probsDNB_1H["2"])
-            },
-            "DNB_2H": {
-                "1": toOdds(probsDNB_2H["1"]),
-                "2": toOdds(probsDNB_2H["2"])
-            },
-            "BTTS": convertObjToOdds(probsBTTS),
-            "BTTS_1H": convertObjToOdds(probsBTTS_1H),
-            "BTTS_2H": convertObjToOdds(probsBTTS_2H),
-            "OverUnder": convertObjToOdds(probsOU_Match),
-            "OverUnder_1H": convertObjToOdds(probsOU_1H),
-            "OverUnder_2H": convertObjToOdds(probsOU_2H),
-            "Handicap": convertObjToOdds(probsHandicap),
-            "ht_ft": convertObjToOdds(probsHTFT),
-            "Corners_OU": convertObjToOdds(probsCornersOU),
-            "Cards_OU": convertObjToOdds(probsCardsOU),
-            "Total_Home": convertObjToOdds(probsTotalHome),
-            "Total_Away": convertObjToOdds(probsTotalAway),
-            "clean_sheet_home": convertObjToOdds(cleanSheets.clean_sheet_home),
-            "clean_sheet_away": convertObjToOdds(cleanSheets.clean_sheet_away),
-            "WinToNil": {
-                Home: toOdds(winToNil.Home),
-                Away: toOdds(winToNil.Away),
-                No: toOdds(winToNil.No)
-            },
-            "Combo_Result_BTTS": convertObjToOdds(comboBTTS),
-            "Combo_Result_Total": convertObjToOdds(comboResultTotal),
-        };
-
-        // Keep probs for summary only (not full dump)
-        const predictions = {
-            lambdas: {
-                goals_home: round2(lambdaGoalsHome),
-                goals_away: round2(lambdaGoalsAway),
-                goals_home_HT: round2(lambdaGoalsHomeHT),
-                goals_away_HT: round2(lambdaGoalsAwayHT),
-                corners_total: round2(lambdaCornersTotal),
-                cards_total: round2(lambdaCardsTotal),
-            },
-            probs: {
-                "1X2": probs1X2
-            },
-            fair_odds: fairOdds,
-        };
-
-        // ==================== // VALUE DETECTION (PRO) // ====================
-        const valueBets = [];
-
-        if (data.bookmaker_odds) {
-            const bookie = data.bookmaker_odds;
-
-            const pushValue = (market, outcome, fairOdd, bookieOdd, devig) => {
-                const b = safeNum(bookieOdd, 0);
-                const f = safeNum(fairOdd, 0);
-                if (b <= 1e-12 || f <= 1e-12) return;
-
-                const fairProb = 1 / f;
-                const edge = (b / f) - 1;
-
-                const devigProb = devig?.devigProb;
-                const ok = sanityValueGate({
-                    market,
-                    fairOdd: f,
-                    bookieOdd: b,
-                    devigProb,
-                    fairProb
-                });
-                if (!ok) return;
-
-                // thresholds: Edge must be > 10% AND <= 50%
-                if (edge > 0.10 && edge <= 0.50) {
-                    valueBets.push({
-                        market,
-                        outcome,
-                        fair_odd: f,
-                        bookie_odd: b,
-                        edge,
-                        edge_percent: (edge * 100).toFixed(1) + "%",
-                        devig_prob_percent: Number.isFinite(devigProb) ? (devigProb * 100).toFixed(1) + "%" : null,
-                        fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
-                        overround: devig?.overround ? round2(devig.overround) : null,
-                    });
-                }
-            };
-
-            // 1X2, DNB, BTTS etc (simple)
-            const checkSimpleMarket = (marketKey, outcomes) => {
-                const bM = bookie[marketKey];
-                const fM = fairOdds[marketKey];
-                if (!bM || !fM) return;
-
-                outcomes.forEach(out => {
-                    const fOdd = fM[out];
-                    const bOdd = bM[out];
-                    if (!fOdd || !bOdd) return;
-                    const devig = devigProportional(bM, out);
-                    pushValue(marketKey, out, fOdd, bOdd, devig);
-                });
-            };
-
-            checkSimpleMarket("1X2", ["1", "X", "2"]);
-            checkSimpleMarket("1X2_1H", ["1", "X", "2"]);
-            checkSimpleMarket("1X2_2H", ["1", "X", "2"]);
-            checkSimpleMarket("DNB", ["1", "2"]);
-            checkSimpleMarket("DNB_1H", ["1", "2"]);
-            checkSimpleMarket("DNB_2H", ["1", "2"]);
-            checkSimpleMarket("BTTS", ["Yes", "No"]);
-            checkSimpleMarket("BTTS_1H", ["Yes", "No"]);
-            checkSimpleMarket("BTTS_2H", ["Yes", "No"]);
-            checkSimpleMarket("clean_sheet_home", ["Yes", "No"]);
-            checkSimpleMarket("clean_sheet_away", ["Yes", "No"]);
-            checkSimpleMarket("WinToNil", ["Home", "Away", "No"]);
-            // checkSimpleMarket("DoubleChance", ["Home/Draw", "Home/Away", "Draw/Away"]); // handled specially below
-
-            // DoubleChance mapping (No Devigging)
-            if (bookie["DoubleChance"] && fairOdds["DoubleChance"]) {
-                const bM = bookie["DoubleChance"];
-                const fM = fairOdds["DoubleChance"];
-                const map = {
-                    "Home/Draw": fM["1X"],
-                    "Home/Away": fM["12"],
-                    "Draw/Away": fM["X2"],
-                };
-                for (const k in map) {
-                    if (map[k] && bM[k]) {
-                        // Pass null for devig to skip devig sanity checks and rely on raw comparison
-                        pushValue("DoubleChance", k, map[k], bM[k], null);
-                    }
-                }
-            }
-
-            // OU style markets: evaluate per "Over X" / "Under X"
-            const checkOU = (marketKey) => {
-                const bM = bookie[marketKey];
-                const fM = fairOdds[marketKey];
-                if (!bM || !fM) return;
-
-                // try to pair over/under for same line
-                const lines = new Set();
-                for (const k in bM) {
-                    const m = String(k).match(/^(Over|Under)\s+(.+)$/i);
-                    if (m) lines.add(m[2]);
-                }
-                lines.forEach(line => {
-                    const overKey = `Over ${line}`;
-                    const underKey = `Under ${line}`;
-                    if (!bM[overKey] || !bM[underKey]) return;
-                    const mini = {
-                        [overKey]: bM[overKey],
-                        [underKey]: bM[underKey]
-                    };
-
-                    if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigProportional(mini, overKey));
-                    if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigProportional(mini, underKey));
-                });
-            };
-
-            ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
-
-            // Handicap: Segmentation by line + Key Mapping
-            if (bookie["Handicap"] && fairOdds["Handicap"] && isEuropeanHandicap3Way(bookie["Handicap"])) {
-                const bM = bookie["Handicap"];
-                const fM = fairOdds["Handicap"];
-
-                // 1. Group by line value (e.g. "1")
-                // Bookie keys might look like "1 (-1)", "X (-1)", "2 (+1)" or "2 (-1)" depending on format
-
-                const groups = {}; // Key: "-1" -> { "1 (-1)": odd, "X (-1)": odd, "2 (+1)": odd }
-
-                for (const k in bM) {
-                    // Regex to capture the number in parens: "1 (-1)", "2 (+1)", "Home -1"
-                    const m = k.match(/([+-]?\d+(\.\d+)?)\)$/);
-                    if (m) {
-                        const hcpVal = parseFloat(m[1]); // e.g. -1, +1
-                        // We want to group "Home -1" (val -1), "Tie -1" (val -1), "Away +1" (val +1).
-                        // Note: Away +1 implies Home -1 line.
-                        // So if we see +1 on Away, the "line" is -1.
-                        // If we see -1 on Away, the "line" is +1.
-                        // Let's define the "Line" as the Home Handicap.
-
-                        let line = null;
-                        if (k.includes("1 (") || k.includes("Home") || k.includes("X (") || k.includes("Draw") || k.includes("Tie")) {
-                             line = hcpVal;
-                        } else if (k.includes("2 (") || k.includes("Away")) {
-                             line = -hcpVal;
-                        }
-
-                        if (line !== null) {
-                            if (!groups[line]) groups[line] = {};
-                            groups[line][k] = bM[k];
-                        }
-                    }
-                }
-
-                // 2. Process each group
-                for (const lineStr in groups) {
-                    const subMarket = groups[lineStr];
-                    const line = parseFloat(lineStr);
-
-                    // Construct our internal keys for this line
-                    // We generated keys like "1 (-1)", "X (-1)", "2 (-1)".
-                    // Where "2 (-1)" meant the 3rd outcome of the (-1) simulation.
-                    const sign = line > 0 ? "+" : "";
-                    const internalSuffix = `(${sign}${line})`;
-                    const intKey1 = `1 ${internalSuffix}`;
-                    const intKeyX = `X ${internalSuffix}`;
-                    const intKey2 = `2 ${internalSuffix}`;
-
-                    // Now map Bookie keys in subMarket to these internal keys
-                    // Bookie "1 (-1)" matches intKey1
-                    // Bookie "X (-1)" matches intKeyX
-                    // Bookie "2 (+1)" matches intKey2
-
-                    for (const bk in subMarket) {
-                        let matchedFairOdd = null;
-
-                        // normalize bk to see what it is
-                        if (bk.includes("1 (") || bk.includes("Home")) {
-                             matchedFairOdd = fM[intKey1];
-                        } else if (bk.includes("X (") || bk.includes("Draw") || bk.includes("Tie")) {
-                             matchedFairOdd = fM[intKeyX];
-                        } else if (bk.includes("2 (") || bk.includes("Away")) {
-                             matchedFairOdd = fM[intKey2];
-                        }
-
-                        if (matchedFairOdd) {
-                            // Devig using the subMarket
-                            const devig = devigProportional(subMarket, bk);
-                            pushValue("Handicap", bk, matchedFairOdd, subMarket[bk], devig);
-                        }
-                    }
-                }
-            }
-
-            // Complex markets (HT/FT + combos): devig on whatever outcomes exist, but sanity-gated
-            ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
-                const bM = bookie[marketKey];
-                const fM = fairOdds[marketKey];
-                if (!bM || !fM) return;
-                for (const k in bM) {
-                    if (!fM[k]) continue;
-                    pushValue(marketKey, k, fM[k], bM[k], devigProportional(bM, k));
-                }
-            });
-        }
-
-        // ==================== // CLEAN OUTPUT ONLY // ====================
-        const cleanOutput = buildCleanOutput(data, predictions, valueBets);
-        results.push({ json: cleanOutput });
+const results = [];
+// 'items' is the global array in n8n Code node
+for (const item of items) {
+    const data = item.json;
+    if (!data?.home || !data?.away) {
+        results.push(item);
+        continue;
     }
 
-    return results;
+    const home = data.home;
+    const away = data.away;
+
+    // --- A) Lambdas goals
+    const hAttack = safeNum(home["Shooting_npxG"], 0);
+    const aAttack = safeNum(away["Shooting_npxG"], 0);
+    const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
+    const hOppXG = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
+
+    const homeFormFactor = calculateFormFactor(home?.team_season?.form);
+    const awayFormFactor = calculateFormFactor(away?.team_season?.form);
+
+    const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
+    const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
+
+    // --- B) HT splits (auto-detect base 0-1 vs 0-100)
+    let homeHTPct = safeNum(home?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
+        safeNum(home?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
+        safeNum(home?.team_season?.["goals_for_minute_31-45_percentage"], 0);
+
+    let awayHTPct = safeNum(away?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
+        safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
+        safeNum(away?.team_season?.["goals_for_minute_31-45_percentage"], 0);
+
+    if (homeHTPct > 1.5) homeHTPct /= 100;
+    if (awayHTPct > 1.5) awayHTPct /= 100;
+
+    const homeHT = clamp(homeHTPct, 0.05, 0.95);
+    const awayHT = clamp(awayHTPct, 0.05, 0.95);
+
+    const lambdaGoalsHomeHT = lambdaGoalsHome * homeHT;
+    const lambdaGoalsAwayHT = lambdaGoalsAway * awayHT;
+    const lambdaGoalsHome2H = lambdaGoalsHome * (1 - homeHT);
+    const lambdaGoalsAway2H = lambdaGoalsAway * (1 - awayHT);
+
+    // --- C) Matrices
+    const MAX_GOALS = 15;
+    const matrixMatch = generateMatrix(lambdaGoalsHome, lambdaGoalsAway, MAX_GOALS);
+    const matrixHT = generateMatrix(lambdaGoalsHomeHT, lambdaGoalsAwayHT, MAX_GOALS);
+    const matrix2H = generateMatrix(lambdaGoalsHome2H, lambdaGoalsAway2H, MAX_GOALS);
+
+    const totalDistFT = getTotalDist(matrixMatch);
+    const totalDistHT = getTotalDist(matrixHT);
+    const totalDist2H = getTotalDist(matrix2H);
+
+    const margFT = getMarginals(matrixMatch);
+
+    // --- D) Market probabilities
+    const probs1X2 = calc1X2(matrixMatch);
+    const probs1X2_1H = calc1X2(matrixHT);
+    const probs1X2_2H = calc1X2(matrix2H);
+
+    const prob1X = probs1X2["1"] + probs1X2["X"];
+    const probX2 = probs1X2["X"] + probs1X2["2"];
+    const prob12 = probs1X2["1"] + probs1X2["2"];
+
+    const probsDNB = calcDNB(probs1X2);
+    const probsDNB_1H = calcDNB(probs1X2_1H);
+    const probsDNB_2H = calcDNB(probs1X2_2H);
+
+    // HT/FT
+    const probsHTFT = (() => {
+        const mapping = {
+            "1": "Home",
+            "X": "Draw",
+            "2": "Away"
+        };
+        const expanded = {};
+        for (let h1 = 0; h1 < MAX_GOALS; h1++) {
+            for (let a1 = 0; a1 < MAX_GOALS; a1++) {
+                const pHT = matrixHT[h1][a1];
+                const htRes = h1 > a1 ? "1" : (h1 === a1 ? "X" : "2");
+                for (let h2 = 0; h2 < MAX_GOALS; h2++) {
+                    for (let a2 = 0; a2 < MAX_GOALS; a2++) {
+                        const p2 = matrix2H[h2][a2];
+                        const ftH = h1 + h2;
+                        const ftA = a1 + a2;
+                        const ftRes = ftH > ftA ? "1" : (ftH === ftA ? "X" : "2");
+                        const key = `${mapping[htRes]}/${mapping[ftRes]}`;
+                        expanded[key] = (expanded[key] || 0) + (pHT * p2);
+                    }
+                }
+            }
+        }
+        return expanded;
+    })();
+
+    const probsOU_Match = calcOUFromDist(totalDistFT, 7.5);
+    const probsOU_1H = calcOUFromDist(totalDistHT, 4.5);
+    const probsOU_2H = calcOUFromDist(totalDist2H, 4.5);
+
+    const probsBTTS = calcBTTS(matrixMatch);
+    const probsBTTS_1H = calcBTTS(matrixHT);
+    const probsBTTS_2H = calcBTTS(matrix2H);
+
+    // Handicap European (3-way)
+    const handicapLines = [-3, -2, -1, 1, 2, 3];
+    const probsHandicap = {};
+    for (const hcp of handicapLines) {
+        const res = calculateEuropeanHandicap(matrixMatch, hcp, 0);
+        const sign = hcp > 0 ? "+" : "";
+        const key = `(${sign}${hcp})`;
+        probsHandicap[`1 ${key}`] = res["1"];
+        probsHandicap[`X ${key}`] = res["X"];
+        probsHandicap[`2 ${key}`] = res["2"];
+    }
+
+    const probsTotalHome = calcTeamTotalsOU(margFT.home, 4.5);
+    const probsTotalAway = calcTeamTotalsOU(margFT.away, 4.5);
+
+    const cleanSheets = calcCleanSheet(matrixMatch);
+    const winToNil = calcWinToNil(matrixMatch);
+
+    // Corners & Cards lambdas
+    const lambdaCornersHome = clamp((safeNum(home["PassTypes_CK"], 0) + safeNum(away?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
+    const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
+    const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
+    const probsCornersOU = calcPoissonOU(lambdaCornersTotal, 14.5);
+
+    const homeCardPoints = safeNum(home["Standard_Stats_CrdY"], 0) + 2 * safeNum(home["Standard_Stats_CrdR"], 0);
+    const awayCardPoints = safeNum(away["Standard_Stats_CrdY"], 0) + 2 * safeNum(away["Standard_Stats_CrdR"], 0);
+    const homeOppCardPoints = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
+    const awayOppCardPoints = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
+
+    const lambdaCardsHome = clamp((homeCardPoints + awayOppCardPoints) / 2, 0.05, 10);
+    const lambdaCardsAway = clamp((awayCardPoints + homeOppCardPoints) / 2, 0.05, 10);
+    const lambdaCardsTotal = clamp(lambdaCardsHome + lambdaCardsAway, 0.1, 15);
+    const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 6.5);
+
+    // Combos
+    const comboBTTS = {
+        "Home/Yes": sumProb(matrixMatch, (h, a) => h > a && h > 0 && a > 0),
+        "Draw/Yes": sumProb(matrixMatch, (h, a) => h === a && h > 0 && a > 0),
+        "Away/Yes": sumProb(matrixMatch, (h, a) => a > h && h > 0 && a > 0),
+        "Home/No": sumProb(matrixMatch, (h, a) => h > a && (h === 0 || a === 0)),
+        "Draw/No": sumProb(matrixMatch, (h, a) => h === a && (h === 0 || a === 0)),
+        "Away/No": sumProb(matrixMatch, (h, a) => a > h && (h === 0 || a === 0)),
+    };
+
+    const comboResultTotal = {
+        "Home/Over 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) > 2.5),
+        "Draw/Over 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) > 2.5),
+        "Away/Over 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) > 2.5),
+        "Home/Under 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) < 2.5),
+        "Draw/Under 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) < 2.5),
+        "Away/Under 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) < 2.5),
+    };
+
+    // Fair odds
+    const fairOdds = {
+        "1X2": convertObjToOdds(probs1X2),
+        "1X2_1H": convertObjToOdds(probs1X2_1H),
+        "1X2_2H": convertObjToOdds(probs1X2_2H),
+        "DoubleChance": {
+            "1X": toOdds(prob1X),
+            "X2": toOdds(probX2),
+            "12": toOdds(prob12)
+        },
+        "DNB": {
+            "1": toOdds(probsDNB["1"]),
+            "2": toOdds(probsDNB["2"])
+        },
+        "DNB_1H": {
+            "1": toOdds(probsDNB_1H["1"]),
+            "2": toOdds(probsDNB_1H["2"])
+        },
+        "DNB_2H": {
+            "1": toOdds(probsDNB_2H["1"]),
+            "2": toOdds(probsDNB_2H["2"])
+        },
+        "BTTS": convertObjToOdds(probsBTTS),
+        "BTTS_1H": convertObjToOdds(probsBTTS_1H),
+        "BTTS_2H": convertObjToOdds(probsBTTS_2H),
+        "OverUnder": convertObjToOdds(probsOU_Match),
+        "OverUnder_1H": convertObjToOdds(probsOU_1H),
+        "OverUnder_2H": convertObjToOdds(probsOU_2H),
+        "Handicap": convertObjToOdds(probsHandicap),
+        "ht_ft": convertObjToOdds(probsHTFT),
+        "Corners_OU": convertObjToOdds(probsCornersOU),
+        "Cards_OU": convertObjToOdds(probsCardsOU),
+        "Total_Home": convertObjToOdds(probsTotalHome),
+        "Total_Away": convertObjToOdds(probsTotalAway),
+        "clean_sheet_home": convertObjToOdds(cleanSheets.clean_sheet_home),
+        "clean_sheet_away": convertObjToOdds(cleanSheets.clean_sheet_away),
+        "WinToNil": {
+            Home: toOdds(winToNil.Home),
+            Away: toOdds(winToNil.Away),
+            No: toOdds(winToNil.No)
+        },
+        "Combo_Result_BTTS": convertObjToOdds(comboBTTS),
+        "Combo_Result_Total": convertObjToOdds(comboResultTotal),
+    };
+
+    // Keep probs for summary only (not full dump)
+    const predictions = {
+        lambdas: {
+            goals_home: round2(lambdaGoalsHome),
+            goals_away: round2(lambdaGoalsAway),
+            goals_home_HT: round2(lambdaGoalsHomeHT),
+            goals_away_HT: round2(lambdaGoalsAwayHT),
+            corners_total: round2(lambdaCornersTotal),
+            cards_total: round2(lambdaCardsTotal),
+        },
+        probs: {
+            "1X2": probs1X2
+        },
+        fair_odds: fairOdds,
+    };
+
+    // ==================== // VALUE DETECTION (PRO) // ====================
+    const valueBets = [];
+
+    if (data.bookmaker_odds) {
+        const bookie = data.bookmaker_odds;
+
+        const pushValue = (market, outcome, fairOdd, bookieOdd, devig) => {
+            const b = safeNum(bookieOdd, 0);
+            const f = safeNum(fairOdd, 0);
+            if (b <= 1e-12 || f <= 1e-12) return;
+
+            const fairProb = 1 / f;
+            const edge = (b / f) - 1;
+
+            const devigProb = devig?.devigProb;
+            const ok = sanityValueGate({
+                market,
+                fairOdd: f,
+                bookieOdd: b,
+                devigProb,
+                fairProb
+            });
+            if (!ok) return;
+
+            // thresholds: Edge must be > 10% AND <= 50%
+            if (edge > 0.10 && edge <= 0.50) {
+                valueBets.push({
+                    market,
+                    outcome,
+                    fair_odd: f,
+                    bookie_odd: b,
+                    edge,
+                    edge_percent: (edge * 100).toFixed(1) + "%",
+                    devig_prob_percent: Number.isFinite(devigProb) ? (devigProb * 100).toFixed(1) + "%" : null,
+                    fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
+                    overround: devig?.overround ? round2(devig.overround) : null,
+                });
+            }
+        };
+
+        // 1X2, DNB, BTTS etc (simple)
+        const checkSimpleMarket = (marketKey, outcomes) => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+
+            outcomes.forEach(out => {
+                const fOdd = fM[out];
+                const bOdd = bM[out];
+                if (!fOdd || !bOdd) return;
+                const devig = devigProportional(bM, out);
+                pushValue(marketKey, out, fOdd, bOdd, devig);
+            });
+        };
+
+        checkSimpleMarket("1X2", ["1", "X", "2"]);
+        checkSimpleMarket("1X2_1H", ["1", "X", "2"]);
+        checkSimpleMarket("1X2_2H", ["1", "X", "2"]);
+        checkSimpleMarket("DNB", ["1", "2"]);
+        checkSimpleMarket("DNB_1H", ["1", "2"]);
+        checkSimpleMarket("DNB_2H", ["1", "2"]);
+        checkSimpleMarket("BTTS", ["Yes", "No"]);
+        checkSimpleMarket("BTTS_1H", ["Yes", "No"]);
+        checkSimpleMarket("BTTS_2H", ["Yes", "No"]);
+        checkSimpleMarket("clean_sheet_home", ["Yes", "No"]);
+        checkSimpleMarket("clean_sheet_away", ["Yes", "No"]);
+        checkSimpleMarket("WinToNil", ["Home", "Away", "No"]);
+        // checkSimpleMarket("DoubleChance", ["Home/Draw", "Home/Away", "Draw/Away"]); // handled specially below
+
+        // DoubleChance mapping (No Devigging)
+        if (bookie["DoubleChance"] && fairOdds["DoubleChance"]) {
+            const bM = bookie["DoubleChance"];
+            const fM = fairOdds["DoubleChance"];
+            const map = {
+                "Home/Draw": fM["1X"],
+                "Home/Away": fM["12"],
+                "Draw/Away": fM["X2"],
+            };
+            for (const k in map) {
+                if (map[k] && bM[k]) {
+                    // Pass null for devig to skip devig sanity checks and rely on raw comparison
+                    pushValue("DoubleChance", k, map[k], bM[k], null);
+                }
+            }
+        }
+
+        // OU style markets: evaluate per "Over X" / "Under X"
+        const checkOU = (marketKey) => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+
+            // try to pair over/under for same line
+            const lines = new Set();
+            for (const k in bM) {
+                const m = String(k).match(/^(Over|Under)\s+(.+)$/i);
+                if (m) lines.add(m[2]);
+            }
+            lines.forEach(line => {
+                const overKey = `Over ${line}`;
+                const underKey = `Under ${line}`;
+                if (!bM[overKey] || !bM[underKey]) return;
+                const mini = {
+                    [overKey]: bM[overKey],
+                    [underKey]: bM[underKey]
+                };
+
+                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigProportional(mini, overKey));
+                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigProportional(mini, underKey));
+            });
+        };
+
+        ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
+
+        // Handicap: Segmentation by line + Key Mapping
+        if (bookie["Handicap"] && fairOdds["Handicap"] && isEuropeanHandicap3Way(bookie["Handicap"])) {
+            const bM = bookie["Handicap"];
+            const fM = fairOdds["Handicap"];
+
+            // 1. Group by line value (e.g. "1")
+            // Bookie keys might look like "1 (-1)", "X (-1)", "2 (+1)" or "2 (-1)" depending on format
+
+            const groups = {}; // Key: "-1" -> { "1 (-1)": odd, "X (-1)": odd, "2 (+1)": odd }
+
+            for (const k in bM) {
+                // Regex to capture the number in parens: "1 (-1)", "2 (+1)", "Home -1"
+                const m = k.match(/([+-]?\d+(\.\d+)?)\)$/);
+                if (m) {
+                    const hcpVal = parseFloat(m[1]); // e.g. -1, +1
+                    // We want to group "Home -1" (val -1), "Tie -1" (val -1), "Away +1" (val +1).
+                    // Note: Away +1 implies Home -1 line.
+                    // So if we see +1 on Away, the "line" is -1.
+                    // If we see -1 on Away, the "line" is +1.
+                    // Let's define the "Line" as the Home Handicap.
+
+                    let line = null;
+                    if (k.includes("1 (") || k.includes("Home") || k.includes("X (") || k.includes("Draw") || k.includes("Tie")) {
+                            line = hcpVal;
+                    } else if (k.includes("2 (") || k.includes("Away")) {
+                            line = -hcpVal;
+                    }
+
+                    if (line !== null) {
+                        if (!groups[line]) groups[line] = {};
+                        groups[line][k] = bM[k];
+                    }
+                }
+            }
+
+            // 2. Process each group
+            for (const lineStr in groups) {
+                const subMarket = groups[lineStr];
+                const line = parseFloat(lineStr);
+
+                // Construct our internal keys for this line
+                // We generated keys like "1 (-1)", "X (-1)", "2 (-1)".
+                // Where "2 (-1)" meant the 3rd outcome of the (-1) simulation.
+                const sign = line > 0 ? "+" : "";
+                const internalSuffix = `(${sign}${line})`;
+                const intKey1 = `1 ${internalSuffix}`;
+                const intKeyX = `X ${internalSuffix}`;
+                const intKey2 = `2 ${internalSuffix}`;
+
+                // Now map Bookie keys in subMarket to these internal keys
+                // Bookie "1 (-1)" matches intKey1
+                // Bookie "X (-1)" matches intKeyX
+                // Bookie "2 (+1)" matches intKey2
+
+                for (const bk in subMarket) {
+                    let matchedFairOdd = null;
+
+                    // normalize bk to see what it is
+                    if (bk.includes("1 (") || bk.includes("Home")) {
+                            matchedFairOdd = fM[intKey1];
+                    } else if (bk.includes("X (") || bk.includes("Draw") || bk.includes("Tie")) {
+                            matchedFairOdd = fM[intKeyX];
+                    } else if (bk.includes("2 (") || bk.includes("Away")) {
+                            matchedFairOdd = fM[intKey2];
+                    }
+
+                    if (matchedFairOdd) {
+                        // Devig using the subMarket
+                        const devig = devigProportional(subMarket, bk);
+                        pushValue("Handicap", bk, matchedFairOdd, subMarket[bk], devig);
+                    }
+                }
+            }
+        }
+
+        // Complex markets (HT/FT + combos): devig on whatever outcomes exist, but sanity-gated
+        ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+            for (const k in bM) {
+                if (!fM[k]) continue;
+                pushValue(marketKey, k, fM[k], bM[k], devigProportional(bM, k));
+            }
+        });
+    }
+
+    // ==================== // CLEAN OUTPUT ONLY // ====================
+    const cleanOutput = buildCleanOutput(data, predictions, valueBets);
+    results.push({ json: cleanOutput });
 }
 
-module.exports = { processItems };
+return results;

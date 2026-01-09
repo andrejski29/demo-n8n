@@ -1,6 +1,5 @@
 
 const fs = require('fs');
-const { processItems } = require('./value_bet_detector');
 
 try {
     const rawData = fs.readFileSync('results.txt', 'utf8');
@@ -9,8 +8,15 @@ try {
     // Simulate n8n items structure
     const items = data.map(d => ({ json: d }));
 
+    const code = fs.readFileSync('value_bet_detector.js', 'utf8');
+
     console.log("Processing items...");
-    const resultItems = processItems(items);
+
+    // Create a function that simulates the n8n environment
+    // In n8n code node, 'items' is global.
+    const runCode = new Function('items', code);
+
+    const resultItems = runCode(items);
 
     const output = resultItems.map(item => item.json);
 
