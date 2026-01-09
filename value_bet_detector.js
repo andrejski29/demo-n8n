@@ -122,6 +122,8 @@ const convertObjToOdds = (obj) => {
     return out;
 };
 
+// ==================== // MARKET CALCULATORS // ====================
+
 const calcOUFromDist = (dist, maxLine) => {
     const cdf = cdfFromDist(dist);
     const base = {};
@@ -163,21 +165,8 @@ const calcOUFromDist = (dist, maxLine) => {
         res[`Over ${parseFloat(L)}`] = v.over;
         res[`Under ${parseFloat(L)}`] = v.under;
     }
-    for (let k = 0; k <= Math.floor(maxLine); k++) {
-        const a0 = base[(k).toFixed(2)];
-        const a05 = base[(k + 0.5).toFixed(2)];
-        const a1 = base[(k + 1).toFixed(2)];
-        const L25 = k + 0.25;
-        const L75 = k + 0.75;
-        if (a0 && a05) {
-            res[`Over ${L25}`] = (a0.over + a05.over) / 2;
-            res[`Under ${L25}`] = (a0.under + a05.under) / 2;
-        }
-        if (a05 && a1) {
-            res[`Over ${L75}`] = (a05.over + a1.over) / 2;
-            res[`Under ${L75}`] = (a05.under + a1.under) / 2;
-        }
-    }
+    // REMOVED QUARTER LINE GENERATION
+
     return res;
 };
 
@@ -282,13 +271,12 @@ const calcPoissonOU = (lambda, maxLine) => {
             }
         }
     }
+    // REMOVED QUARTER LINE GENERATION HERE AS WELL (It wasn't there before, but ensuring)
     return out;
 };
 
 // ==================== // VALUE DETECTION (PRO) // ====================
 
-// Devig proportional. Returns { devigProb, overround }.
-// Only valid if the market subset is complete (sumInv > 0 and sufficient outcomes).
 function devigProportional(bookieMarketObj, selectionKey) {
     if (!bookieMarketObj || !bookieMarketObj[selectionKey]) return null;
     let sumInv = 0;
@@ -313,16 +301,12 @@ function devigProportional(bookieMarketObj, selectionKey) {
     };
 }
 
-// 1) Robust Team Name Extraction
 function getTeamName(teamObj) {
     if (!teamObj) return "Unknown";
     return teamObj.squad || teamObj.Squad || teamObj.team_name || teamObj.name || teamObj.team || teamObj.Team || "Unknown";
 }
 
-// ==================== // OUTPUT CLEANER // ====================
-
 function buildCleanOutput(homeName, awayName, topMarkets, valueBets) {
-    // sort value bets by edge descending
     const sortedVB = (valueBets || []).slice().sort((a, b) => (parseFloat(b.edge_percent) || 0) - (parseFloat(a.edge_percent) || 0));
 
     return {
@@ -360,7 +344,7 @@ for (const item of items) {
     const homeName = getTeamName(home);
     const awayName = getTeamName(away);
 
-    // --- A) Lambdas
+    // ... (calculations same as before) ...
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
@@ -372,7 +356,6 @@ for (const item of items) {
     const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
     const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
 
-    // --- B) HT splits
     let homeHTPct = safeNum(home?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_31-45_percentage"], 0);
@@ -392,7 +375,6 @@ for (const item of items) {
     const lambdaGoalsHome2H = lambdaGoalsHome * (1 - homeHT);
     const lambdaGoalsAway2H = lambdaGoalsAway * (1 - awayHT);
 
-    // --- C) Matrices
     const MAX_GOALS = 15;
     const matrixMatch = generateMatrix(lambdaGoalsHome, lambdaGoalsAway, MAX_GOALS);
     const matrixHT = generateMatrix(lambdaGoalsHomeHT, lambdaGoalsAwayHT, MAX_GOALS);
@@ -404,7 +386,6 @@ for (const item of items) {
 
     const margFT = getMarginals(matrixMatch);
 
-    // --- D) Probabilities
     const probs1X2 = calc1X2(matrixMatch);
     const probs1X2_1H = calc1X2(matrixHT);
     const probs1X2_2H = calc1X2(matrix2H);
@@ -451,7 +432,6 @@ for (const item of items) {
     const probsBTTS_1H = calcBTTS(matrixHT);
     const probsBTTS_2H = calcBTTS(matrix2H);
 
-    // Handicap European (3-way)
     const handicapLines = [-3, -2, -1, 1, 2, 3];
     const probsHandicap = {};
     for (const hcp of handicapLines) {
@@ -469,7 +449,6 @@ for (const item of items) {
     const cleanSheets = calcCleanSheet(matrixMatch);
     const winToNil = calcWinToNil(matrixMatch);
 
-    // Corners/Cards
     const lambdaCornersHome = clamp((safeNum(home["PassTypes_CK"], 0) + safeNum(away?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
@@ -644,9 +623,16 @@ for (const item of items) {
                 const m = String(k).match(/^(Over|Under)\s+(.+)$/i);
                 if (m) lines.add(m[2]);
             }
-            lines.forEach(line => {
-                const overKey = `Over ${line}`;
-                const underKey = `Under ${line}`;
+            lines.forEach(lineStr => {
+                const line = parseFloat(lineStr);
+                // Strict Asian Quarter filtering:
+                // Only allow lines ending in .0 or .5
+                // x.0 % 0.5 == 0.  x.5 % 0.5 == 0.
+                // x.25 % 0.5 == 0.25.
+                if (Math.abs(line % 0.5) > 1e-9) return;
+
+                const overKey = `Over ${lineStr}`;
+                const underKey = `Under ${lineStr}`;
                 if (!bM[overKey] || !bM[underKey]) return;
                 const mini = { [overKey]: bM[overKey], [underKey]: bM[underKey] };
                 if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigProportional(mini, overKey));
@@ -688,6 +674,7 @@ for (const item of items) {
             }
             for (const lineStr in groups) {
                 const subMarket = groups[lineStr];
+                // Strict 3-way check drops Asian 2-way handicap lines
                 if (Object.keys(subMarket).length !== 3) continue;
                 const line = parseFloat(lineStr);
                 const sign = line > 0 ? "+" : "";
