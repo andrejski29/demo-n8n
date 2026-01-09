@@ -575,6 +575,12 @@ for (const item of items) {
             // Filters on EV Edge
             if (evEdge <= 0.10 || evEdge > 0.50) return;
 
+            // Sanity Check for 2-way devig mirror
+            // If devig is present and marketProb (devigProb) is very far from implied, warn
+            if (devig?.count === 2 && Math.abs(marketProb - impliedProb) > 0.25) {
+                console.warn(`WARNING: Potential mirrored mapping detected for ${market}:${outcome}. Implied: ${round2(impliedProb)}, Devig: ${round2(marketProb)}`);
+            }
+
             valueBets.push({
                 market,
                 outcome,
@@ -665,18 +671,21 @@ for (const item of items) {
                 if (!bM[overKey] || !bM[underKey]) return;
 
                 const mini = { [overKey]: bM[overKey], [underKey]: bM[underKey] };
-                const devigStats = devigProportional(mini, overKey);
+
+                // CORRECT FIX: Compute devig per selection
+                const devigOver = devigProportional(mini, overKey);
+                const devigUnder = devigProportional(mini, underKey);
 
                 if (isInteger) {
-                    // Safe overround range for 2-way integer markets
-                    if (!devigStats || devigStats.overround < 1.01 || devigStats.overround > 1.12) {
-                        console.log(`Skipping Integer Line ${lineStr} on ${marketKey}: Overround ${devigStats?.overround}`);
+                    // Safe overround range for 2-way integer markets (use devigOver which has overround)
+                    if (!devigOver || devigOver.overround < 1.01 || devigOver.overround > 1.12) {
+                        console.log(`Skipping Integer Line ${lineStr} on ${marketKey}: Overround ${devigOver?.overround}`);
                         return;
                     }
                 }
 
-                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigStats);
-                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigStats);
+                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigOver);
+                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigUnder);
             });
         };
         ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
