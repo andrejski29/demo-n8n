@@ -319,7 +319,7 @@ function buildCleanOutput(homeName, awayName, topMarkets, valueBets) {
             outcome: v.outcome,
             fair_odd: v.fair_odd,
             bookie_odd: v.bookie_odd,
-            edge_percent: v.edge_percent, // Now Betable Edge
+            edge_percent: v.edge_percent, // EV Edge
             market_edge_percent: v.market_edge_percent, // Devig Edge
             devig_prob_percent: v.devig_prob_percent ?? null,
             fair_prob_percent: v.fair_prob_percent ?? null,
@@ -362,7 +362,7 @@ for (const item of items) {
 
     let awayHTPct = safeNum(away?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
         safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
-        safeNum(away?.team_season?.["goals_for_minute_16-30_percentage"], 0);
+        safeNum(away?.team_season?.["goals_for_minute_31-45_percentage"], 0);
 
     if (homeHTPct > 1.5) homeHTPct /= 100;
     if (awayHTPct > 1.5) awayHTPct /= 100;
@@ -650,15 +650,33 @@ for (const item of items) {
             }
             lines.forEach(lineStr => {
                 const line = parseFloat(lineStr);
-                // Strict integer filtering: .5 only
-                if (Math.abs((line % 1) - 0.5) > 1e-9) return;
+                const isInteger = Math.abs(line % 1) < 1e-9;
 
+                // Policy 1: Asian Filter (Reject .25 / .75 everywhere)
+                if (Math.abs(line % 0.5) > 1e-9) return;
+
+                // Policy 2: Goal Totals -> .5 only
+                const isGoalTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H"].includes(marketKey);
+                if (isGoalTotal && isInteger) return;
+
+                // Policy 3: Integer Validation (Overround check)
                 const overKey = `Over ${lineStr}`;
                 const underKey = `Under ${lineStr}`;
                 if (!bM[overKey] || !bM[underKey]) return;
+
                 const mini = { [overKey]: bM[overKey], [underKey]: bM[underKey] };
-                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigProportional(mini, overKey));
-                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigProportional(mini, underKey));
+                const devigStats = devigProportional(mini, overKey);
+
+                if (isInteger) {
+                    // Safe overround range for 2-way integer markets
+                    if (!devigStats || devigStats.overround < 1.01 || devigStats.overround > 1.12) {
+                        console.log(`Skipping Integer Line ${lineStr} on ${marketKey}: Overround ${devigStats?.overround}`);
+                        return;
+                    }
+                }
+
+                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigStats);
+                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigStats);
             });
         };
         ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
