@@ -180,7 +180,6 @@ const calcOUFromDist = (dist, maxLine) => {
     for (let L = 0.5; L <= maxLine + 1e-9; L += 0.5) {
         const v = base[L.toFixed(2)];
         if (!v) continue;
-        // Use normalized keys for fair odds structure
         const normKey = normalizeLineStr(L);
         res[`Over ${normKey}`] = v.over;
         res[`Under ${normKey}`] = v.under;
@@ -776,7 +775,6 @@ for (const item of items) {
                         const kk = String(k).toLowerCase();
                         // Boundary check: look for exact number with boundaries
                         // e.g. "exactly 4" or "exact 4" or "=4" or "= 4"
-                        // Also skip push/refund/void settlement notes
                         const isExactKeyword = /exact|exactly|=|\\bpush\\b|\\brefund\\b|\\bvoid\\b/i.test(kk);
 
                         // Check if line number appears as whole word
@@ -785,9 +783,9 @@ for (const item of items) {
                         const matchesLine = lineRegexRaw.test(kk) || lineRegexNorm.test(kk);
 
                         // But ignore if key also contains Over/Under (which would imply it's a 2-way key with notes)
-                        const isOverUnder = kk.includes("over") || kk.includes("under");
+                        const isOUSelection = /^(over|under)\b/i.test(kk.trim());
 
-                        return isExactKeyword && matchesLine && !isOverUnder;
+                        return isExactKeyword && matchesLine && !isOUSelection;
                     });
                     if (hasExactly) return;
                 }
@@ -823,10 +821,11 @@ for (const item of items) {
         };
         ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
 
-        if (bookie["Handicap"] && fairOdds["Handicap"]) {
-            const bM = bookie["Handicap"];
-            const fM = fairOdds["Handicap"];
-            // REVERTED TO SIGNED GROUPING (Option A) with FALLBACK
+        const checkHandicapMarket = (marketKey) => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+
             const groups = {};
             for (const k in bM) {
                 const m = k.match(/([+-]?\d+(\.\d+)?)\)?$/);
@@ -856,6 +855,7 @@ for (const item of items) {
                     groups[normLine][k] = bM[k];
                 }
             }
+
             for (const lineStr in groups) {
                 const subMarket = groups[lineStr];
                 if (Object.keys(subMarket).length !== 3) continue;
@@ -863,24 +863,25 @@ for (const item of items) {
                 const normLineStr = normalizeLineStr(line);
 
                 // Fallback Logic for Fair Odds Lookup
-                // Primary Key (Standard signed)
                 const sign = line > 0 ? "+" : "";
                 const primarySuffix = `(${sign}${normLineStr})`;
 
-                // Fallback Key (Flipped sign)
-                const signFlipped = line > 0 ? "" : "+"; // if line>0, flip is neg (-). if line<0, flip is pos (+).
-                // Wait, if line=-1, sign="", suffix "(-1)". Flipped: line>0 is false. signFlipped="+". suffix "(+1)".
-                // Correct.
-                const fallbackSuffix = `(${signFlipped}${Math.abs(line)})`;
+                const fallbackLine = -line;
+                const fallbackNorm = normalizeLineStr(fallbackLine);
+                const fallbackSign = parseFloat(fallbackNorm) > 0 ? "+" : "";
+                const fallbackSuffix = `(${fallbackSign}${fallbackNorm})`;
 
                 // Check which set exists in Fair Odds
-                // We assume consistency: if 1(primary) exists, use primary. Else check fallback.
-                const hasPrimary = fM[`1 ${primarySuffix}`] !== undefined;
-                const hasFallback = fM[`1 ${fallbackSuffix}`] !== undefined;
+                // Check all 3 outcomes to be safe
+                const hasPrimary = fM[`1 ${primarySuffix}`] !== undefined && fM[`X ${primarySuffix}`] !== undefined && fM[`2 ${primarySuffix}`] !== undefined;
+                const hasFallback = fM[`1 ${fallbackSuffix}`] !== undefined && fM[`X ${fallbackSuffix}`] !== undefined && fM[`2 ${fallbackSuffix}`] !== undefined;
 
                 let activeSuffix = null;
                 if (hasPrimary) activeSuffix = primarySuffix;
-                else if (hasFallback) activeSuffix = fallbackSuffix;
+                else if (hasFallback) {
+                    activeSuffix = fallbackSuffix;
+                    console.log(`HANDICAP FALLBACK USED: ${lineStr} ${primarySuffix} -> ${fallbackSuffix}`);
+                }
 
                 if (!activeSuffix) continue;
 
@@ -898,11 +899,15 @@ for (const item of items) {
 
                     if (matchedFairOdd) {
                         const devig = devigProportional(subMarket, bk);
-                        pushValue("Handicap", bk, matchedFairOdd, subMarket[bk], devig);
+                        pushValue(marketKey, bk, matchedFairOdd, subMarket[bk], devig);
                     }
                 }
             }
-        }
+        };
+
+        checkHandicapMarket("Handicap");
+        checkHandicapMarket("Handicap_1H");
+        checkHandicapMarket("Handicap_2H");
 
         ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
             const bM = bookie[marketKey];
