@@ -437,9 +437,7 @@ for (const item of items) {
 
     const homeFormFactor = calculateFormFactor(home?.team_season?.form);
     const awayFormFactor = calculateFormFactor(away?.team_season?.form);
-    // ...
-    // Truncated for brevity of the diff, but I am writing the full file
-    // I need to include all lines
+
     const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
     const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
 
@@ -762,20 +760,30 @@ for (const item of items) {
                 // Policy 1: Asian Filter (Reject .25 / .75 everywhere)
                 if (Math.abs(line % 0.5) > 1e-9) return;
 
-                // Policy 2: Goal Totals -> .5 only
-                const isGoalTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H"].includes(marketKey);
-                if (isGoalTotal && isInteger) return;
+                // Policy 2: Goal Totals -> .5 only (Also Team Totals restricted to .5)
+                const isGoalOrTeamTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Total_Home", "Total_Away"].includes(marketKey);
+                if (isGoalOrTeamTotal && isInteger) return;
+
+                // Whitelist for Integers: Only Cards & Corners allowed
+                const allowedIntegerMarkets = ["Corners_OU", "Cards_OU"];
+                if (isInteger && !allowedIntegerMarkets.includes(marketKey)) return;
 
                 // 3-way Integer Totals Check
-                // Scan bM keys for "Exact" or "Exactly" with raw or norm line
                 if (isInteger) {
                     const rawL = String(raw).toLowerCase();
                     const normL = String(norm).toLowerCase();
                     const hasExactly = Object.keys(bM).some(k => {
                         const kk = String(k).toLowerCase();
-                        const isExact = kk.includes("exact") || kk.includes("exactly") || kk.includes("=");
-                        const matchesLine = kk.includes(rawL) || kk.includes(normL);
-                        return isExact && matchesLine;
+                        // Boundary check: look for exact number with boundaries
+                        // e.g. "exactly 4" or "exact 4" or "=4" or "= 4"
+                        const isExactKeyword = kk.includes("exact") || kk.includes("=");
+
+                        // Check if line number appears as whole word
+                        const lineRegexRaw = new RegExp(`\\b${rawL}\\b`);
+                        const lineRegexNorm = new RegExp(`\\b${normL}\\b`);
+                        const matchesLine = lineRegexRaw.test(kk) || lineRegexNorm.test(kk);
+
+                        return isExactKeyword && matchesLine;
                     });
                     if (hasExactly) return;
                 }
@@ -838,7 +846,7 @@ for (const item of items) {
                 }
 
                 if (line !== null) {
-                    const normLine = parseFloat(normalizeLineStr(line)); // normalize -0 to 0 etc
+                    const normLine = parseFloat(normalizeLineStr(line));
                     if (!groups[normLine]) groups[normLine] = {};
                     groups[normLine][k] = bM[k];
                 }
@@ -847,7 +855,7 @@ for (const item of items) {
                 const subMarket = groups[lineStr];
                 if (Object.keys(subMarket).length !== 3) continue;
                 const line = parseFloat(lineStr);
-                const normLineStr = normalizeLineStr(line); // clean string
+                const normLineStr = normalizeLineStr(line);
 
                 const sign = line > 0 ? "+" : "";
                 const internalSuffix = `(${sign}${normLineStr})`;
@@ -890,6 +898,17 @@ for (const item of items) {
     }
     if (hasTotalAwayUnder05) {
         valueBets = valueBets.filter(v => !((v.market === "clean_sheet_home" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Home")));
+    }
+
+    const topMarkets = [];
+    const p1x2 = predictions.probs["1X2"];
+    if (p1x2) {
+        const best = [
+            { k: `${homeName} win`, p: p1x2["1"] },
+            { k: "Draw", p: p1x2["X"] },
+            { k: `${awayName} win`, p: p1x2["2"] },
+        ].sort((a, b) => b.p - a.p)[0];
+        if (best) topMarkets.push({ market: "1X2 (model)", selection: best.k, prob_percent: pct1(best.p) });
     }
 
     const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch);
