@@ -180,6 +180,7 @@ const calcOUFromDist = (dist, maxLine) => {
     for (let L = 0.5; L <= maxLine + 1e-9; L += 0.5) {
         const v = base[L.toFixed(2)];
         if (!v) continue;
+        // Use normalized keys for fair odds structure
         const normKey = normalizeLineStr(L);
         res[`Over ${normKey}`] = v.over;
         res[`Under ${normKey}`] = v.under;
@@ -775,7 +776,7 @@ for (const item of items) {
                         const kk = String(k).toLowerCase();
                         // Boundary check: look for exact number with boundaries
                         // e.g. "exactly 4" or "exact 4" or "=4" or "= 4"
-                        const isExactKeyword = /exact|exactly|=|\\bpush\\b|\\brefund\\b|\\bvoid\\b/i.test(kk);
+                        const isExactKeyword = /exact|exactly|=|\bpush\b|\brefund\b|\bvoid\b/i.test(kk);
 
                         // Check if line number appears as whole word
                         const lineRegexRaw = new RegExp(`\\b${rawL}\\b`);
