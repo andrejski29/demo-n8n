@@ -24,6 +24,19 @@ function calculateFormFactor(formString) {
     return 0.8 + ((pts / 15) * 0.4); // 0.8..1.2
 }
 
+function normalizeLineStr(s) {
+    const n = parseFloat(String(s).replace(/[()]/g, "").trim());
+    if (!Number.isFinite(n)) return null;
+    const v = Math.abs(n) < 1e-12 ? 0 : n; // avoid "-0"
+    return String(v);
+}
+
+function computeRatingScore(fairProb, evEdge) {
+    const probScore = clamp(fairProb, 0, 1) * 100;
+    const valueScore = clamp(evEdge, 0, 0.50) / 0.50 * 100;
+    return Math.round((0.6 * probScore + 0.4 * valueScore) * 10) / 10;
+}
+
 function poissonPmfSeries(lambda, kMax) {
     lambda = Math.max(0, lambda);
     const pmf = Array(kMax + 1).fill(0);
@@ -159,8 +172,10 @@ const calcOUFromDist = (dist, maxLine) => {
     for (let L = 0.5; L <= maxLine + 1e-9; L += 0.5) {
         const v = base[L.toFixed(2)];
         if (!v) continue;
-        res[`Over ${parseFloat(L)}`] = v.over;
-        res[`Under ${parseFloat(L)}`] = v.under;
+        // Use normalized keys for fair odds structure
+        const normKey = normalizeLineStr(L);
+        res[`Over ${normKey}`] = v.over;
+        res[`Under ${normKey}`] = v.under;
     }
     return res;
 };
@@ -266,7 +281,18 @@ const calcPoissonOU = (lambda, maxLine) => {
             }
         }
     }
-    return out;
+
+    // Normalize keys in Poisson OU too
+    const outNorm = {};
+    for(const k in out) {
+       const m = k.match(/^(Over|Under)\s+(.+)$/);
+       if (m) {
+           outNorm[`${m[1]} ${normalizeLineStr(m[2])}`] = out[k];
+       } else {
+           outNorm[k] = out[k];
+       }
+    }
+    return outNorm;
 };
 
 // ==================== // VALUE DETECTION (PRO) // ====================
@@ -305,22 +331,68 @@ function getTeamName(teamObj) {
     return teamObj.squad || teamObj.Squad || teamObj.team_name || teamObj.name || teamObj.team || teamObj.Team || "Unknown";
 }
 
-function buildCleanOutput(homeName, awayName, topMarkets, valueBets) {
+function buildCleanOutput(data, predictions, valueBets, matrixMatch) {
+    const homeName = getTeamName(data?.home);
+    const awayName = getTeamName(data?.away);
+    const fixtureId = data?.response?.[0]?.fixture?.id || data?.fixture_id || null;
+    const fixtureDate = data?.response?.[0]?.fixture?.date || data?.fixture_date || null;
+
     const sortedVB = (valueBets || []).slice().sort((a, b) => (parseFloat(b.edge_percent) || 0) - (parseFloat(a.edge_percent) || 0));
 
+    // Top Scenarios
+    const topScenarios = [];
+
+    // 1X2
+    const p1x2 = predictions.probs["1X2"];
+    if (p1x2) {
+        const best1x2 = [
+            { type: "1X2", selection: "1", prob: p1x2["1"] },
+            { type: "1X2", selection: "X", prob: p1x2["X"] },
+            { type: "1X2", selection: "2", prob: p1x2["2"] },
+        ].sort((a, b) => b.prob - a.prob)[0];
+        if (best1x2) topScenarios.push(best1x2);
+    }
+
+    // OU 2.5
+    const ou25 = predictions.fair_odds["OverUnder"];
+    if (ou25) {
+        const o = 1/safeNum(ou25["Over 2.5"]);
+        const u = 1/safeNum(ou25["Under 2.5"]);
+        if (o > u) topScenarios.push({ type: "OU", selection: "Over 2.5", prob: o });
+        else topScenarios.push({ type: "OU", selection: "Under 2.5", prob: u });
+    }
+
+    // Correct Score
+    if (matrixMatch) {
+        const scores = [];
+        for(let h=0; h<matrixMatch.length; h++) {
+            for(let a=0; a<matrixMatch[h].length; a++) {
+                scores.push({ type: "scoreline", selection: `${h}-${a}`, prob: matrixMatch[h][a] });
+            }
+        }
+        scores.sort((a,b) => b.prob - a.prob);
+        if (scores.length > 0) topScenarios.push(scores[0]);
+    }
+
     return {
+        fixture_id: fixtureId,
+        fixture_date: fixtureDate,
         match: {
             home: homeName,
             away: awayName
         },
-        top_markets: topMarkets,
+        top_scenarios: topScenarios,
         value_bets: sortedVB.map(v => ({
             market: v.market,
             outcome: v.outcome,
+            bookmaker: v.bookmaker,
             fair_odd: v.fair_odd,
             bookie_odd: v.bookie_odd,
             edge_percent: v.edge_percent, // EV Edge
+            ev_edge_raw: v.ev_edge_raw,
+            fair_prob_raw: v.fair_prob_raw,
             market_edge_percent: v.market_edge_percent, // Devig Edge
+            rating_score: v.rating_score,
             devig_prob_percent: v.devig_prob_percent ?? null,
             fair_prob_percent: v.fair_prob_percent ?? null,
             overround: v.overround ?? null,
@@ -341,10 +413,8 @@ for (const item of items) {
 
     const home = data.home;
     const away = data.away;
-    const homeName = getTeamName(home);
-    const awayName = getTeamName(away);
+    const bookmakerName = data?.response?.[0]?.bookmakers?.[0]?.name || "Unknown";
 
-    // ... (calculations same as before) ...
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
@@ -437,10 +507,15 @@ for (const item of items) {
     for (const hcp of handicapLines) {
         const res = calculateEuropeanHandicap(matrixMatch, hcp, 0);
         const sign = hcp > 0 ? "+" : "";
-        const key = `(${sign}${hcp})`;
-        probsHandicap[`1 ${key}`] = res["1"];
-        probsHandicap[`X ${key}`] = res["X"];
-        probsHandicap[`2 ${key}`] = res["2"];
+        const key = `(${sign}${hcp})`; // Already normalized in loop
+        // Ensure consistent formatting
+        const normHcp = normalizeLineStr(hcp);
+        const signNorm = parseFloat(normHcp) > 0 ? "+" : "";
+        const keyNorm = `(${signNorm}${normHcp})`;
+
+        probsHandicap[`1 ${keyNorm}`] = res["1"];
+        probsHandicap[`X ${keyNorm}`] = res["X"];
+        probsHandicap[`2 ${keyNorm}`] = res["2"];
     }
 
     const probsTotalHome = calcTeamTotalsOU(margFT.home, 4.5);
@@ -576,18 +651,23 @@ for (const item of items) {
             if (evEdge <= 0.10 || evEdge > 0.50) return;
 
             // Sanity Check for 2-way devig mirror
-            // If devig is present and marketProb (devigProb) is very far from implied, warn
             if (devig?.count === 2 && Math.abs(marketProb - impliedProb) > 0.25) {
                 console.warn(`WARNING: Potential mirrored mapping detected for ${market}:${outcome}. Implied: ${round2(impliedProb)}, Devig: ${round2(marketProb)}`);
             }
 
+            const ratingScore = computeRatingScore(fairProb, evEdge);
+
             valueBets.push({
                 market,
                 outcome,
+                bookmaker: bookmakerName,
                 fair_odd: f,
                 bookie_odd: b,
                 edge_percent: (evEdge * 100).toFixed(1) + "%",
+                ev_edge_raw: round2(evEdge),
+                fair_prob_raw: round2(fairProb),
                 market_edge_percent: marketEdge !== null ? (marketEdge * 100).toFixed(1) + "%" : null,
+                rating_score: ratingScore,
                 devig_prob_percent: devig?.devigProb ? (devig.devigProb * 100).toFixed(1) + "%" : null,
                 fair_prob_percent: (fairProb * 100).toFixed(1) + "%",
                 overround: devig?.overround ? round2(devig.overround) : null,
@@ -655,7 +735,11 @@ for (const item of items) {
                 if (m) lines.add(m[2]);
             }
             lines.forEach(lineStr => {
-                const line = parseFloat(lineStr);
+                const raw = lineStr;
+                const norm = normalizeLineStr(raw);
+                if (!norm) return;
+
+                const line = parseFloat(norm);
                 const isInteger = Math.abs(line % 1) < 1e-9;
 
                 // Policy 1: Asian Filter (Reject .25 / .75 everywhere)
@@ -665,27 +749,32 @@ for (const item of items) {
                 const isGoalTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H"].includes(marketKey);
                 if (isGoalTotal && isInteger) return;
 
-                // Policy 3: Integer Validation (Overround check)
-                const overKey = `Over ${lineStr}`;
-                const underKey = `Under ${lineStr}`;
-                if (!bM[overKey] || !bM[underKey]) return;
+                // 3. Normalized Key Construction
+                const overKeyB = `Over ${raw}`;
+                const underKeyB = `Under ${raw}`;
 
-                const mini = { [overKey]: bM[overKey], [underKey]: bM[underKey] };
+                const overKeyF = `Over ${norm}`;
+                const underKeyF = `Under ${norm}`;
 
-                // CORRECT FIX: Compute devig per selection
-                const devigOver = devigProportional(mini, overKey);
-                const devigUnder = devigProportional(mini, underKey);
+                const overKeyOut = `Over ${norm}`;
+                const underKeyOut = `Under ${norm}`;
+
+                if (!bM[overKeyB] || !bM[underKeyB]) return;
+
+                const mini = { [overKeyB]: bM[overKeyB], [underKeyB]: bM[underKeyB] };
+                const devigOver = devigProportional(mini, overKeyB);
+                const devigUnder = devigProportional(mini, underKeyB);
 
                 if (isInteger) {
-                    // Safe overround range for 2-way integer markets (use devigOver which has overround)
-                    if (!devigOver || devigOver.overround < 1.01 || devigOver.overround > 1.12) {
+                    // Safe overround range check
+                    if (!devigOver || devigOver.overround < 1.01 || devigOver.overround > 1.15) {
                         console.log(`Skipping Integer Line ${lineStr} on ${marketKey}: Overround ${devigOver?.overround}`);
                         return;
                     }
                 }
 
-                if (fM[overKey]) pushValue(marketKey, overKey, fM[overKey], bM[overKey], devigOver);
-                if (fM[underKey]) pushValue(marketKey, underKey, fM[underKey], bM[underKey], devigUnder);
+                if (fM[overKeyF]) pushValue(marketKey, overKeyOut, fM[overKeyF], bM[overKeyB], devigOver);
+                if (fM[underKeyF]) pushValue(marketKey, underKeyOut, fM[underKeyF], bM[underKeyB], devigUnder);
             });
         };
         ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
@@ -707,7 +796,7 @@ for (const item of items) {
 
                 if (!outcomeType) continue;
 
-                let val = parseFloat(m[1]);
+                let val = parseFloat(m[1]); // e.g. -1.0
                 let line = null;
 
                 if (outcomeType === "1" || outcomeType === "X") {
@@ -717,19 +806,23 @@ for (const item of items) {
                 }
 
                 if (line !== null) {
-                    if (!groups[line]) groups[line] = {};
-                    groups[line][k] = bM[k];
+                    const normLine = parseFloat(normalizeLineStr(line)); // normalize -0 to 0 etc
+                    if (!groups[normLine]) groups[normLine] = {};
+                    groups[normLine][k] = bM[k];
                 }
             }
             for (const lineStr in groups) {
                 const subMarket = groups[lineStr];
                 if (Object.keys(subMarket).length !== 3) continue;
                 const line = parseFloat(lineStr);
+                const normLineStr = normalizeLineStr(line); // clean string
+
                 const sign = line > 0 ? "+" : "";
-                const internalSuffix = `(${sign}${line})`;
+                const internalSuffix = `(${sign}${normLineStr})`;
                 const intKey1 = `1 ${internalSuffix}`;
                 const intKeyX = `X ${internalSuffix}`;
                 const intKey2 = `2 ${internalSuffix}`;
+
                 for (const bk in subMarket) {
                     let matchedFairOdd = null;
                     const kTrim = bk.trim();
@@ -767,18 +860,7 @@ for (const item of items) {
         valueBets = valueBets.filter(v => !((v.market === "clean_sheet_home" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Home")));
     }
 
-    const topMarkets = [];
-    const p1x2 = predictions.probs["1X2"];
-    if (p1x2) {
-        const best = [
-            { k: `${homeName} win`, p: p1x2["1"] },
-            { k: "Draw", p: p1x2["X"] },
-            { k: `${awayName} win`, p: p1x2["2"] },
-        ].sort((a, b) => b.p - a.p)[0];
-        if (best) topMarkets.push({ market: "1X2 (model)", selection: best.k, prob_percent: pct1(best.p) });
-    }
-
-    const cleanOutput = buildCleanOutput(homeName, awayName, topMarkets, valueBets);
+    const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch);
     results.push({ json: cleanOutput });
 }
 
