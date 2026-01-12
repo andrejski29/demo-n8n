@@ -776,14 +776,18 @@ for (const item of items) {
                         const kk = String(k).toLowerCase();
                         // Boundary check: look for exact number with boundaries
                         // e.g. "exactly 4" or "exact 4" or "=4" or "= 4"
-                        const isExactKeyword = kk.includes("exact") || kk.includes("=");
+                        // Also skip push/refund/void settlement notes
+                        const isExactKeyword = /exact|exactly|=|\\bpush\\b|\\brefund\\b|\\bvoid\\b/i.test(kk);
 
                         // Check if line number appears as whole word
                         const lineRegexRaw = new RegExp(`\\b${rawL}\\b`);
                         const lineRegexNorm = new RegExp(`\\b${normL}\\b`);
                         const matchesLine = lineRegexRaw.test(kk) || lineRegexNorm.test(kk);
 
-                        return isExactKeyword && matchesLine;
+                        // But ignore if key also contains Over/Under (which would imply it's a 2-way key with notes)
+                        const isOverUnder = kk.includes("over") || kk.includes("under");
+
+                        return isExactKeyword && matchesLine && !isOverUnder;
                     });
                     if (hasExactly) return;
                 }
@@ -822,6 +826,7 @@ for (const item of items) {
         if (bookie["Handicap"] && fairOdds["Handicap"]) {
             const bM = bookie["Handicap"];
             const fM = fairOdds["Handicap"];
+            // REVERTED TO SIGNED GROUPING (Option A) with FALLBACK
             const groups = {};
             for (const k in bM) {
                 const m = k.match(/([+-]?\d+(\.\d+)?)\)?$/);
@@ -846,7 +851,7 @@ for (const item of items) {
                 }
 
                 if (line !== null) {
-                    const normLine = parseFloat(normalizeLineStr(line));
+                    const normLine = parseFloat(normalizeLineStr(line)); // normalize -0 to 0 etc
                     if (!groups[normLine]) groups[normLine] = {};
                     groups[normLine][k] = bM[k];
                 }
@@ -857,11 +862,31 @@ for (const item of items) {
                 const line = parseFloat(lineStr);
                 const normLineStr = normalizeLineStr(line);
 
+                // Fallback Logic for Fair Odds Lookup
+                // Primary Key (Standard signed)
                 const sign = line > 0 ? "+" : "";
-                const internalSuffix = `(${sign}${normLineStr})`;
-                const intKey1 = `1 ${internalSuffix}`;
-                const intKeyX = `X ${internalSuffix}`;
-                const intKey2 = `2 ${internalSuffix}`;
+                const primarySuffix = `(${sign}${normLineStr})`;
+
+                // Fallback Key (Flipped sign)
+                const signFlipped = line > 0 ? "" : "+"; // if line>0, flip is neg (-). if line<0, flip is pos (+).
+                // Wait, if line=-1, sign="", suffix "(-1)". Flipped: line>0 is false. signFlipped="+". suffix "(+1)".
+                // Correct.
+                const fallbackSuffix = `(${signFlipped}${Math.abs(line)})`;
+
+                // Check which set exists in Fair Odds
+                // We assume consistency: if 1(primary) exists, use primary. Else check fallback.
+                const hasPrimary = fM[`1 ${primarySuffix}`] !== undefined;
+                const hasFallback = fM[`1 ${fallbackSuffix}`] !== undefined;
+
+                let activeSuffix = null;
+                if (hasPrimary) activeSuffix = primarySuffix;
+                else if (hasFallback) activeSuffix = fallbackSuffix;
+
+                if (!activeSuffix) continue;
+
+                const intKey1 = `1 ${activeSuffix}`;
+                const intKeyX = `X ${activeSuffix}`;
+                const intKey2 = `2 ${activeSuffix}`;
 
                 for (const bk in subMarket) {
                     let matchedFairOdd = null;
