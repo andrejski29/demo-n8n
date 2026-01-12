@@ -31,10 +31,18 @@ function normalizeLineStr(s) {
     return String(v);
 }
 
-function computeRatingScore(fairProb, evEdge) {
+function computeRatingScore(fairProb, evEdge, marketEdge) {
     const probScore = clamp(fairProb, 0, 1) * 100;
     const valueScore = clamp(evEdge, 0, 0.50) / 0.50 * 100;
-    return Math.round((0.6 * probScore + 0.4 * valueScore) * 10) / 10;
+    let score = (0.6 * probScore + 0.4 * valueScore);
+
+    // Market Agreement Bonus/Malus
+    if (marketEdge !== null) {
+        if (marketEdge > 0.05) score += 2;
+        if (marketEdge < -0.10) score -= 2;
+    }
+
+    return Math.round(score * 10) / 10;
 }
 
 function poissonPmfSeries(lambda, kMax) {
@@ -356,10 +364,15 @@ function buildCleanOutput(data, predictions, valueBets, matrixMatch) {
     // OU 2.5
     const ou25 = predictions.fair_odds["OverUnder"];
     if (ou25) {
-        const o = 1/safeNum(ou25["Over 2.5"]);
-        const u = 1/safeNum(ou25["Under 2.5"]);
-        if (o > u) topScenarios.push({ type: "OU", selection: "Over 2.5", prob: o });
-        else topScenarios.push({ type: "OU", selection: "Under 2.5", prob: u });
+        const oOdd = safeNum(ou25["Over 2.5"], 0);
+        const uOdd = safeNum(ou25["Under 2.5"], 0);
+
+        if (oOdd > 1e-9 && uOdd > 1e-9) {
+            const o = 1 / oOdd;
+            const u = 1 / uOdd;
+            if (o > u) topScenarios.push({ type: "OU", selection: "Over 2.5", prob: o });
+            else topScenarios.push({ type: "OU", selection: "Under 2.5", prob: u });
+        }
     }
 
     // Correct Score
@@ -413,6 +426,8 @@ for (const item of items) {
 
     const home = data.home;
     const away = data.away;
+    const homeName = getTeamName(home);
+    const awayName = getTeamName(away);
     const bookmakerName = data?.response?.[0]?.bookmakers?.[0]?.name || "Unknown";
 
     const hAttack = safeNum(home["Shooting_npxG"], 0);
@@ -422,7 +437,9 @@ for (const item of items) {
 
     const homeFormFactor = calculateFormFactor(home?.team_season?.form);
     const awayFormFactor = calculateFormFactor(away?.team_season?.form);
-
+    // ...
+    // Truncated for brevity of the diff, but I am writing the full file
+    // I need to include all lines
     const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
     const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
 
@@ -655,7 +672,7 @@ for (const item of items) {
                 console.warn(`WARNING: Potential mirrored mapping detected for ${market}:${outcome}. Implied: ${round2(impliedProb)}, Devig: ${round2(marketProb)}`);
             }
 
-            const ratingScore = computeRatingScore(fairProb, evEdge);
+            const ratingScore = computeRatingScore(fairProb, evEdge, marketEdge);
 
             valueBets.push({
                 market,
@@ -749,7 +766,22 @@ for (const item of items) {
                 const isGoalTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H"].includes(marketKey);
                 if (isGoalTotal && isInteger) return;
 
-                // 3. Normalized Key Construction
+                // 3-way Integer Totals Check
+                // Scan bM keys for "Exact" or "Exactly" with raw or norm line
+                if (isInteger) {
+                    const rawL = String(raw).toLowerCase();
+                    const normL = String(norm).toLowerCase();
+                    const hasExactly = Object.keys(bM).some(k => {
+                        const kk = String(k).toLowerCase();
+                        const isExact = kk.includes("exact") || kk.includes("exactly") || kk.includes("=");
+                        const matchesLine = kk.includes(rawL) || kk.includes(normL);
+                        return isExact && matchesLine;
+                    });
+                    if (hasExactly) return;
+                }
+
+                // 3. Normalized Key Construction for FAIR lookup and OUTPUT
+                // Bookie lookup MUST use RAW keys from lines set
                 const overKeyB = `Over ${raw}`;
                 const underKeyB = `Under ${raw}`;
 
