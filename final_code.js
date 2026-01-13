@@ -884,7 +884,7 @@ for (const item of items) {
                 if (hasPrimary) activeSuffix = primarySuffix;
                 else if (hasFallback) {
                     activeSuffix = fallbackSuffix;
-                    console.log(`HANDICAP FALLBACK USED: ${lineStr} ${primarySuffix} -> ${fallbackSuffix}`);
+                    if (DEBUG) console.log(`HANDICAP FALLBACK USED: ${lineStr} ${primarySuffix} -> ${fallbackSuffix}`);
                 }
 
                 if (!activeSuffix) continue;
@@ -910,8 +910,6 @@ for (const item of items) {
         };
 
         checkHandicapMarket("Handicap");
-        checkHandicapMarket("Handicap_1H");
-        checkHandicapMarket("Handicap_2H");
 
         ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
             const bM = bookie[marketKey];
