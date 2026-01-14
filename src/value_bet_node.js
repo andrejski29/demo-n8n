@@ -1,3 +1,4 @@
+
 const EPS = 1e-12;
 const DEBUG = false;
 
@@ -79,8 +80,8 @@ const renormalizeMatrix = (matrix) => {
 };
 
 const generateMatrix = (lHome, lAway, maxGoals = 15) => {
-    lHome = clamp(safeNum(lHome, 0), 0, 10);
-    lAway = clamp(safeNum(lAway, 0), 0, 10);
+    lHome = clamp(safeNum(lHome, 0), 0, 20); // Allow higher lambdas for shots
+    lAway = clamp(safeNum(lAway, 0), 0, 20);
 
     const pmfH = poissonPmfSeries(lHome, maxGoals - 1);
     const pmfA = poissonPmfSeries(lAway, maxGoals - 1);
@@ -511,6 +512,36 @@ for (const item of items) {
         return expanded;
     })();
 
+    // Exact Goals (Match, Home, Away, 2H)
+    const probsExactGoals = {
+        Match: {}, Home: {}, Away: {}, "2H": {}
+    };
+    for (let k = 0; k <= 6; k++) {
+        probsExactGoals.Match[String(k)] = probEq(totalDistFT, k);
+        probsExactGoals.Home[String(k)] = probEq(margFT.home, k);
+        probsExactGoals.Away[String(k)] = probEq(margFT.away, k);
+        probsExactGoals["2H"][String(k)] = probEq(totalDist2H, k);
+    }
+
+    // Winning Margin
+    const probsMargin = {};
+    for (let h = 0; h < MAX_GOALS; h++) {
+        for (let a = 0; a < MAX_GOALS; a++) {
+            const p = matrixMatch[h][a];
+            if (h > a) {
+                const margin = h - a;
+                const k = margin >= 3 ? "Home by 3+" : `Home by ${margin}`;
+                probsMargin[k] = (probsMargin[k] || 0) + p;
+            } else if (a > h) {
+                const margin = a - h;
+                const k = margin >= 3 ? "Away by 3+" : `Away by ${margin}`;
+                probsMargin[k] = (probsMargin[k] || 0) + p;
+            } else {
+                probsMargin["Draw"] = (probsMargin["Draw"] || 0) + p; // Can be further split if needed
+            }
+        }
+    }
+
     const probsOU_Match = calcOUFromDist(totalDistFT, 7.5);
     const probsOU_1H = calcOUFromDist(totalDistHT, 4.5);
     const probsOU_2H = calcOUFromDist(totalDist2H, 4.5);
@@ -524,7 +555,6 @@ for (const item of items) {
     for (const hcp of handicapLines) {
         const res = calculateEuropeanHandicap(matrixMatch, hcp, 0);
         const sign = hcp > 0 ? "+" : "";
-        const key = `(${sign}${hcp})`; // Already normalized in loop
         // Ensure consistent formatting
         const normHcp = normalizeLineStr(hcp);
         const signNorm = parseFloat(normHcp) > 0 ? "+" : "";
@@ -545,6 +575,8 @@ for (const item of items) {
     const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
     const probsCornersOU = calcPoissonOU(lambdaCornersTotal, 14.5);
+    const probsCornersHomeOU = calcPoissonOU(lambdaCornersHome, 10.5);
+    const probsCornersAwayOU = calcPoissonOU(lambdaCornersAway, 10.5);
 
     const homeCardPoints = safeNum(home["Standard_Stats_CrdY"], 0) + 2 * safeNum(home["Standard_Stats_CrdR"], 0);
     const awayCardPoints = safeNum(away["Standard_Stats_CrdY"], 0) + 2 * safeNum(away["Standard_Stats_CrdR"], 0);
@@ -555,6 +587,40 @@ for (const item of items) {
     const lambdaCardsAway = clamp((awayCardPoints + homeOppCardPoints) / 2, 0.05, 10);
     const lambdaCardsTotal = clamp(lambdaCardsHome + lambdaCardsAway, 0.1, 15);
     const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 6.5);
+    const probsCardsHomeOU = calcPoissonOU(lambdaCardsHome, 5.5);
+    const probsCardsAwayOU = calcPoissonOU(lambdaCardsAway, 5.5);
+
+    // Shots Markets
+    const hSoT = safeNum(home["Shooting_SoT"], 0);
+    const aSoT = safeNum(away["Shooting_SoT"], 0);
+    // Opponent conceded SoT might be in opp_Shooting_Opp_SoT? Fallback to team SoT if missing.
+    // If stats are missing, clamp prevents NaNs.
+    const hOppSoT = safeNum(home?.opponent?.["opp_Shooting_Opp_SoT"], hSoT); // Self fallback
+    const aOppSoT = safeNum(away?.opponent?.["opp_Shooting_Opp_SoT"], aSoT);
+
+    const lambdaSoTHome = clamp((hSoT + aOppSoT) / 2, 0.5, 15);
+    const lambdaSoTAway = clamp((aSoT + hOppSoT) / 2, 0.5, 15);
+    const lambdaSoTTotal = lambdaSoTHome + lambdaSoTAway;
+
+    const probsSoT_OU = calcPoissonOU(lambdaSoTTotal, 20.5);
+
+    // SoT 1x2 using Matrix (20x20 is fast enough)
+    const matrixSoT = generateMatrix(lambdaSoTHome, lambdaSoTAway, 20);
+    const probsSoT_1X2 = calc1X2(matrixSoT);
+
+    // Half Performance
+    const pWin1H = probs1X2_1H["1"];
+    const pWin2H = probs1X2_2H["1"];
+    const pWinEither = 1 - ((1 - pWin1H) * (1 - pWin2H)); // Independence approx
+    const pWinBoth = pWin1H * pWin2H;
+
+    const probsHalfProps = {
+        "Home to Win Either Half": pWinEither,
+        "Home to Win Both Halves": pWinBoth,
+        // Symmetry for Away
+        "Away to Win Either Half": 1 - ((1 - probs1X2_1H["2"]) * (1 - probs1X2_2H["2"])),
+        "Away to Win Both Halves": probs1X2_1H["2"] * probs1X2_2H["2"]
+    };
 
     const comboBTTS = {
         "Home/Yes": sumProb(matrixMatch, (h, a) => h > a && h > 0 && a > 0),
@@ -604,7 +670,11 @@ for (const item of items) {
         "Handicap": convertObjToOdds(probsHandicap),
         "ht_ft": convertObjToOdds(probsHTFT),
         "Corners_OU": convertObjToOdds(probsCornersOU),
+        "Corners_Home": convertObjToOdds(probsCornersHomeOU),
+        "Corners_Away": convertObjToOdds(probsCornersAwayOU),
         "Cards_OU": convertObjToOdds(probsCardsOU),
+        "Cards_Home": convertObjToOdds(probsCardsHomeOU),
+        "Cards_Away": convertObjToOdds(probsCardsAwayOU),
         "Total_Home": convertObjToOdds(probsTotalHome),
         "Total_Away": convertObjToOdds(probsTotalAway),
         "clean_sheet_home": convertObjToOdds(cleanSheets.clean_sheet_home),
@@ -616,6 +686,15 @@ for (const item of items) {
         },
         "Combo_Result_BTTS": convertObjToOdds(comboBTTS),
         "Combo_Result_Total": convertObjToOdds(comboResultTotal),
+        // New Markets
+        "Exact_Goals_Match": convertObjToOdds(probsExactGoals.Match),
+        "Exact_Goals_Home": convertObjToOdds(probsExactGoals.Home),
+        "Exact_Goals_Away": convertObjToOdds(probsExactGoals.Away),
+        "Exact_Goals_2H": convertObjToOdds(probsExactGoals["2H"]),
+        "Winning_Margin": convertObjToOdds(probsMargin),
+        "Shots_OU": convertObjToOdds(probsSoT_OU),
+        "Shots_1X2": convertObjToOdds(probsSoT_1X2),
+        "Half_Props": convertObjToOdds(probsHalfProps)
     };
 
     const predictions = {
@@ -708,6 +787,28 @@ for (const item of items) {
         check3Way("1X2", ["1", "X", "2"]);
         check3Way("1X2_1H", ["1", "X", "2"]);
         check3Way("1X2_2H", ["1", "X", "2"]);
+        // Shot 1x2
+        check3Way("Shots_1X2", ["1", "X", "2"]);
+
+        const checkGeneric = (marketKey) => {
+            const bM = bookie[marketKey];
+            const fM = fairOdds[marketKey];
+            if (!bM || !fM) return;
+            for (const k in bM) {
+                // Fuzzy match or exact? Exact for Exact Goals.
+                // Winning Margin keys in fairOdds: "Home by 1", etc.
+                // Check if key exists in fairOdds directly.
+                if (fM[k]) {
+                    pushValue(marketKey, k, fM[k], bM[k], devigProportional(bM, k));
+                }
+            }
+        };
+        checkGeneric("Exact_Goals_Match");
+        checkGeneric("Exact_Goals_Home");
+        checkGeneric("Exact_Goals_Away");
+        checkGeneric("Exact_Goals_2H");
+        checkGeneric("Winning_Margin");
+        checkGeneric("Half_Props");
 
         const check2Way = (marketKey, outcomes) => {
             const bM = bookie[marketKey];
@@ -766,8 +867,13 @@ for (const item of items) {
                 const isGoalOrTeamTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Total_Home", "Total_Away"].includes(marketKey);
                 if (isGoalOrTeamTotal && isInteger) return;
 
-                // Whitelist for Integers: Only Cards & Corners allowed
-                const allowedIntegerMarkets = ["Corners_OU", "Cards_OU"];
+                // Whitelist for Integers: Only Cards & Corners allowed.
+                // Updated V16: "Integer lines are permitted ONLY for Corners and Cards."
+                // Includes Team Corners/Cards.
+                const allowedIntegerMarkets = [
+                    "Corners_OU", "Corners_Home", "Corners_Away",
+                    "Cards_OU", "Cards_Home", "Cards_Away"
+                ];
                 if (isInteger && !allowedIntegerMarkets.includes(marketKey)) return;
 
                 // 3-way Integer Totals Check
@@ -822,7 +928,13 @@ for (const item of items) {
                 if (fM[underKeyF]) pushValue(marketKey, underKeyOut, fM[underKeyF], bM[underKeyB], devigUnder);
             });
         };
-        ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Corners_OU", "Cards_OU", "Total_Home", "Total_Away"].forEach(checkOU);
+        // Added V16 markets
+        [
+            "OverUnder", "OverUnder_1H", "OverUnder_2H",
+            "Corners_OU", "Corners_Home", "Corners_Away",
+            "Cards_OU", "Cards_Home", "Cards_Away",
+            "Total_Home", "Total_Away", "Shots_OU"
+        ].forEach(checkOU);
 
         const checkHandicapMarket = (marketKey) => {
             const bM = bookie[marketKey];
