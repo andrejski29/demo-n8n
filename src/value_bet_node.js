@@ -330,7 +330,7 @@ function getTeamName(teamObj) {
     return teamObj.squad || teamObj.Squad || teamObj.team_name || teamObj.name || teamObj.team || teamObj.Team || "Unknown";
 }
 
-function buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate) {
+function buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate, updatedAt) {
     const homeName = getTeamName(data?.home);
     const awayName = getTeamName(data?.away);
 
@@ -379,6 +379,7 @@ function buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, 
     return {
         fixture_id: fixtureId,
         fixture_date: fixtureDate,
+        source_updated_at: updatedAt,
         match: {
             home: homeName,
             away: awayName
@@ -469,7 +470,14 @@ for (const item of items) {
 
     const bookmaker_odds = {};
     const fixtureId = data.response?.[0]?.fixtureId ?? data.fixture_id ?? null;
-    const fixtureDate = data.response?.[0]?.updated ?? data.fixture_date ?? null;
+
+    // Strict fixture date extraction: Only accept fields that explicitly mean "kickoff"
+    const fixtureDate = data.response?.[0]?.fixtureDate ||
+                        data.response?.[0]?.fixture?.date ||
+                        data.fixture_date ||
+                        null;
+
+    const updatedAt = data.response?.[0]?.updated ?? null;
     let bookmakerName = data?.response?.[0]?.bookmakerName || "Bet365";
 
     if (data.response && Array.isArray(data.response)) {
@@ -1268,7 +1276,7 @@ for (const item of items) {
         valueBets = valueBets.filter(v => !((v.market === "clean_sheet_home" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Home")));
     }
 
-    const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate);
+    const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate, updatedAt);
     results.push({ json: cleanOutput });
 }
 
