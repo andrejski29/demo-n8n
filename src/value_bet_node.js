@@ -419,29 +419,112 @@ for (const item of items) {
     const away = data.away;
     const homeName = getTeamName(home);
     const awayName = getTeamName(away);
-    const bookmakerName = "Bet365"; // Default as per instruction
 
     // 1. Input Parsing & Odds Mapping
+    const BETNAME_TO_KEY = {
+      "Match Winner": "1X2",
+      "First Half Winner": "1X2_1H",
+      "Second Half Winner": "1X2_2H",
+
+      "Goals Over/Under": "OverUnder",
+      "Goals Over/Under First Half": "OverUnder_1H",
+      "Goals Over/Under - Second Half": "OverUnder_2H",
+
+      "Both Teams Score": "BTTS",
+      "Both Teams Score - First Half": "BTTS_1H",
+      "Both Teams To Score - Second Half": "BTTS_2H",
+
+      "Handicap Result": "Handicap",
+      "Handicap Result - First Half": "Handicap_1H",
+
+      "Double Chance": "DoubleChance",
+      "Home/Away": "Home_Away",
+
+      "Corners Over Under": "Corners_OU",
+      "Corners 1x2": "Corners_1X2",
+      "Home Corners Over/Under": "Corners_Home",
+      "Away Corners Over/Under": "Corners_Away",
+
+      "Cards Over/Under": "Cards_OU",
+      "Home Team Total Cards": "Cards_Home",
+      "Away Team Total Cards": "Cards_Away",
+
+      "Total ShotOnGoal": "Shots_OU",
+      "ShotOnTarget 1x2": "Shots_1X2",
+
+      "HT/FT Double": "ht_ft",
+      "Results/Both Teams Score": "Combo_Result_BTTS",
+      "Result/Total Goals": "Combo_Result_Total",
+      "Total Goals/Both Teams To Score": "Combo_TotalGoals_BTTS",
+      "RTG_H1": "RTG_H1",
+
+      "Exact Goals Number": "Exact_Goals_Match",
+      "Home Team Exact Goals Number": "Exact_Goals_Home",
+      "Away Team Exact Goals Number": "Exact_Goals_Away",
+      "Second Half Exact Goals Number": "Exact_Goals_2H",
+
+      "Winning Margin": "Winning_Margin",
+      "To Win Either Half": "Half_Props", // Needs mapping inside
+      "To Win Both Halves": "Half_Props", // Needs mapping inside
+      "Highest Scoring Half": "Highest_Scoring_Half"
+    };
+
     const bookmaker_odds = {};
+    const fixtureId = data.response?.[0]?.fixtureId ?? data.fixture_id ?? null;
+    const fixtureDate = data.response?.[0]?.updated ?? data.fixture_date ?? null;
+    let bookmakerName = data?.response?.[0]?.bookmakerName || "Bet365";
+
     if (data.response && Array.isArray(data.response)) {
         data.response.forEach(bet => {
             if (!bet.betName || !bet.selection || !bet.odd) return;
-            const marketKey = String(bet.betName).trim();
+            const rawMarket = String(bet.betName).trim();
             const rawSelection = String(bet.selection).trim();
             const odd = parseFloat(bet.odd);
             if (!Number.isFinite(odd)) return;
 
-            if (!bookmaker_odds[marketKey]) bookmaker_odds[marketKey] = {};
+            // Map to Internal Key
+            let internalKey = BETNAME_TO_KEY[rawMarket];
 
-            // Normalize selection: "Over 3.50" -> "Over 3.5"
-            // But we need to keep enough info.
-            // Let's rely on internal standardization when processing specific markets.
-            bookmaker_odds[marketKey][rawSelection] = odd;
+            // Special handling for Half Props which might come as separate markets or selections
+            if (!internalKey) {
+                // Try fuzzy match or skip
+                return;
+            }
+
+            if (!bookmaker_odds[internalKey]) bookmaker_odds[internalKey] = {};
+
+            // Normalize Selection
+            let normSel = rawSelection;
+
+            // 4.1 1X2 Normalization
+            if (["1X2", "1X2_1H", "1X2_2H", "Corners_1X2", "Shots_1X2"].includes(internalKey)) {
+                if (/^Home$/i.test(normSel)) normSel = "1";
+                else if (/^Draw$|^Tie$/i.test(normSel)) normSel = "X";
+                else if (/^Away$/i.test(normSel)) normSel = "2";
+            }
+
+            // 4.2 Over/Under Normalization
+            // "Over 3.50" -> "Over 3.5", "Under (3.0)" -> "Under 3"
+            const ouMatch = normSel.match(/^(Over|Under)\s*[\(\[]?\s*([\d\.]+)/i);
+            if (ouMatch) {
+               const type = ouMatch[1]; // Over/Under
+               const val = parseFloat(ouMatch[2]);
+               const valStr = normalizeLineStr(val); // uses helper
+               normSel = `${type} ${valStr}`;
+            }
+
+            bookmaker_odds[internalKey][normSel] = odd;
         });
     }
     // Backward compatibility if bookmaker_odds is provided directly (for testing)
     if (data.bookmaker_odds) {
         Object.assign(bookmaker_odds, data.bookmaker_odds);
+    }
+
+    if (DEBUG) {
+      console.log("Markets stored:", Object.keys(bookmaker_odds).slice(0,40));
+      console.log("Has OverUnder?", !!bookmaker_odds["OverUnder"]);
+      console.log("Has 1X2?", !!bookmaker_odds["1X2"]);
     }
 
     const hAttack = safeNum(home["Shooting_npxG"], 0);
