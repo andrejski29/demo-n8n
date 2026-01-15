@@ -330,11 +330,9 @@ function getTeamName(teamObj) {
     return teamObj.squad || teamObj.Squad || teamObj.team_name || teamObj.name || teamObj.team || teamObj.Team || "Unknown";
 }
 
-function buildCleanOutput(data, predictions, valueBets, matrixMatch) {
+function buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate) {
     const homeName = getTeamName(data?.home);
     const awayName = getTeamName(data?.away);
-    const fixtureId = data?.response?.[0]?.fixture?.id || data?.fixture_id || null;
-    const fixtureDate = data?.response?.[0]?.fixture?.date || data?.fixture_date || null;
 
     const sortedVB = (valueBets || []).slice().sort((a, b) => (parseFloat(b.edge_percent) || 0) - (parseFloat(a.edge_percent) || 0));
 
@@ -485,9 +483,17 @@ for (const item of items) {
             // Map to Internal Key
             let internalKey = BETNAME_TO_KEY[rawMarket];
 
-            // Special handling for Half Props which might come as separate markets or selections
+            // Hardening: Normalize rawMarket (lowercase, trim) for robust lookup if direct match fails
             if (!internalKey) {
-                // Try fuzzy match or skip
+                // Try lowercase match
+                const lowerMarket = rawMarket.toLowerCase();
+                // Simple iteration to find case-insensitive match (can be optimized if BETNAME_TO_KEY is large)
+                const foundKey = Object.keys(BETNAME_TO_KEY).find(k => k.toLowerCase() === lowerMarket);
+                if (foundKey) internalKey = BETNAME_TO_KEY[foundKey];
+            }
+
+            if (!internalKey) {
+                if (DEBUG) console.log(`Unknown market skipped: ${rawMarket}`);
                 return;
             }
 
@@ -495,6 +501,20 @@ for (const item of items) {
 
             // Normalize Selection
             let normSel = rawSelection;
+
+            // Special Normalization for Half_Props
+            if (internalKey === "Half_Props") {
+               const lowSel = normSel.toLowerCase();
+               let teamPrefix = "";
+               if (lowSel.includes(homeName.toLowerCase()) || lowSel.includes("home")) teamPrefix = "Home";
+               else if (lowSel.includes(awayName.toLowerCase()) || lowSel.includes("away")) teamPrefix = "Away";
+
+               if (teamPrefix) {
+                   if (lowSel.includes("win either half")) normSel = `${teamPrefix} to Win Either Half`;
+                   else if (lowSel.includes("win both halves")) normSel = `${teamPrefix} to Win Both Halves`;
+                   else if (lowSel.includes("score") && (lowSel.includes("both halves") || lowSel.includes("2 halves"))) normSel = `${teamPrefix} Score Both Halves`;
+               }
+            }
 
             // 4.1 1X2 Normalization
             if (["1X2", "1X2_1H", "1X2_2H", "Corners_1X2", "Shots_1X2"].includes(internalKey)) {
@@ -612,6 +632,13 @@ for (const item of items) {
     const probsExactGoals = {
         Match: {}, Home: {}, Away: {}, "2H": {}
     };
+
+    // Precompute CDFs
+    const cdfFT = cdfFromDist(totalDistFT);
+    const cdfHome = cdfFromDist(margFT.home);
+    const cdfAway = cdfFromDist(margFT.away);
+    const cdf2H = cdfFromDist(totalDist2H);
+
     for (let k = 0; k <= 9; k++) { // Cover reasonable range
         const kStr = String(k);
         const kPlus = `${k}+`; // Handling "7+" etc.
@@ -625,10 +652,10 @@ for (const item of items) {
         // "More N" / "N+" (Probability of >= N)
         // Usually "7+" means >= 7.
         // P(>= k) = 1 - CDF(k-1).
-        const pGeMatch = 1 - (k === 0 ? 0 : probLe(cdfFromDist(totalDistFT), k - 1));
-        const pGeHome = 1 - (k === 0 ? 0 : probLe(cdfFromDist(margFT.home), k - 1));
-        const pGeAway = 1 - (k === 0 ? 0 : probLe(cdfFromDist(margFT.away), k - 1));
-        const pGe2H = 1 - (k === 0 ? 0 : probLe(cdfFromDist(totalDist2H), k - 1));
+        const pGeMatch = 1 - (k === 0 ? 0 : probLe(cdfFT, k - 1));
+        const pGeHome = 1 - (k === 0 ? 0 : probLe(cdfHome, k - 1));
+        const pGeAway = 1 - (k === 0 ? 0 : probLe(cdfAway, k - 1));
+        const pGe2H = 1 - (k === 0 ? 0 : probLe(cdf2H, k - 1));
 
         probsExactGoals.Match[kPlus] = pGeMatch;
         probsExactGoals.Home[kPlus] = pGeHome;
@@ -1241,7 +1268,7 @@ for (const item of items) {
         valueBets = valueBets.filter(v => !((v.market === "clean_sheet_home" && v.outcome === "Yes") || (v.market === "WinToNil" && v.outcome === "Home")));
     }
 
-    const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch);
+    const cleanOutput = buildCleanOutput(data, predictions, valueBets, matrixMatch, fixtureId, fixtureDate);
     results.push({ json: cleanOutput });
 }
 
