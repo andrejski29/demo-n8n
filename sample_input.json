@@ -1,0 +1,9 @@
+{
+  "home": { "Shooting_npxG": 1.2, "PassTypes_CK": 5, "Standard_Stats_CrdY": 2, "Standard_Stats_CrdR": 0, "Shooting_SoT": 4 },
+  "away": { "Shooting_npxG": 0.8, "PassTypes_CK": 3, "Standard_Stats_CrdY": 1, "Standard_Stats_CrdR": 0, "Shooting_SoT": 2 },
+  "response": [
+    { "betName": "Match Winner", "selection": "Home", "odd": 2.0, "bookmakerName": "Bet365" },
+    { "betName": "Match Winner", "selection": "Draw", "odd": 3.5, "bookmakerName": "Bet365" },
+    { "betName": "Match Winner", "selection": "Away", "odd": 4.0, "bookmakerName": "Bet365" }
+  ]
+}

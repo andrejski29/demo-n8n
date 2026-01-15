@@ -1,4 +1,3 @@
-
 const EPS = 1e-12;
 const DEBUG = false;
 
@@ -15,17 +14,6 @@ const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
 const round2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : x);
 const pct1 = (p) => (Number.isFinite(p) ? Math.round(p * 1000) / 10 : null); // 1 decimal %
-
-function calculateFormFactor(formString) {
-    if (!formString) return 1;
-    const last5 = String(formString).slice(-5);
-    let pts = 0;
-    for (const c of last5) {
-        if (c === "W") pts += 3;
-        else if (c === "D") pts += 1;
-    }
-    return 0.8 + ((pts / 15) * 0.4); // 0.8..1.2
-}
 
 function normalizeLineStr(s) {
     const n = parseFloat(String(s).replace(/[()]/g, "").trim());
@@ -431,19 +419,42 @@ for (const item of items) {
     const away = data.away;
     const homeName = getTeamName(home);
     const awayName = getTeamName(away);
-    const bookmakerName = data?.response?.[0]?.bookmakers?.[0]?.name || "Unknown";
+    const bookmakerName = "Bet365"; // Default as per instruction
+
+    // 1. Input Parsing & Odds Mapping
+    const bookmaker_odds = {};
+    if (data.response && Array.isArray(data.response)) {
+        data.response.forEach(bet => {
+            if (!bet.betName || !bet.selection || !bet.odd) return;
+            const marketKey = String(bet.betName).trim();
+            const rawSelection = String(bet.selection).trim();
+            const odd = parseFloat(bet.odd);
+            if (!Number.isFinite(odd)) return;
+
+            if (!bookmaker_odds[marketKey]) bookmaker_odds[marketKey] = {};
+
+            // Normalize selection: "Over 3.50" -> "Over 3.5"
+            // But we need to keep enough info.
+            // Let's rely on internal standardization when processing specific markets.
+            bookmaker_odds[marketKey][rawSelection] = odd;
+        });
+    }
+    // Backward compatibility if bookmaker_odds is provided directly (for testing)
+    if (data.bookmaker_odds) {
+        Object.assign(bookmaker_odds, data.bookmaker_odds);
+    }
 
     const hAttack = safeNum(home["Shooting_npxG"], 0);
     const aAttack = safeNum(away["Shooting_npxG"], 0);
     const aOppXG = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
     const hOppXG = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_xG"], 0);
 
-    const homeFormFactor = calculateFormFactor(home?.team_season?.form);
-    const awayFormFactor = calculateFormFactor(away?.team_season?.form);
+    // 2. Variable Mapping & Lambda Formulas
+    // Goals: Average
+    const lambdaGoalsHome = clamp((hAttack + aOppXG) / 2, 0.05, 5.0);
+    const lambdaGoalsAway = clamp((aAttack + hOppXG) / 2, 0.05, 5.0);
 
-    const lambdaGoalsHome = clamp(clamp((hAttack + aOppXG) / 2, 0.05, 4.5) * homeFormFactor, 0.05, 5.0);
-    const lambdaGoalsAway = clamp(clamp((aAttack + hOppXG) / 2, 0.05, 4.5) * awayFormFactor, 0.05, 5.0);
-
+    // HT Share Logic (Stable)
     let homeHTPct = safeNum(home?.team_season?.["goals_for_minute_0-15_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_16-30_percentage"], 0) +
         safeNum(home?.team_season?.["goals_for_minute_31-45_percentage"], 0);
@@ -473,6 +484,8 @@ for (const item of items) {
     const totalDist2H = getTotalDist(matrix2H);
 
     const margFT = getMarginals(matrixMatch);
+    const margHT = getMarginals(matrixHT);
+    const marg2H = getMarginals(matrix2H);
 
     const probs1X2 = calc1X2(matrixMatch);
     const probs1X2_1H = calc1X2(matrixHT);
@@ -512,15 +525,32 @@ for (const item of items) {
         return expanded;
     })();
 
-    // Exact Goals (Match, Home, Away, 2H)
+    // Exact Goals (Match, Home, Away, 2H) - Handle "More N"
     const probsExactGoals = {
         Match: {}, Home: {}, Away: {}, "2H": {}
     };
-    for (let k = 0; k <= 6; k++) {
-        probsExactGoals.Match[String(k)] = probEq(totalDistFT, k);
-        probsExactGoals.Home[String(k)] = probEq(margFT.home, k);
-        probsExactGoals.Away[String(k)] = probEq(margFT.away, k);
-        probsExactGoals["2H"][String(k)] = probEq(totalDist2H, k);
+    for (let k = 0; k <= 9; k++) { // Cover reasonable range
+        const kStr = String(k);
+        const kPlus = `${k}+`; // Handling "7+" etc.
+
+        // Exact
+        probsExactGoals.Match[kStr] = probEq(totalDistFT, k);
+        probsExactGoals.Home[kStr] = probEq(margFT.home, k);
+        probsExactGoals.Away[kStr] = probEq(margFT.away, k);
+        probsExactGoals["2H"][kStr] = probEq(totalDist2H, k);
+
+        // "More N" / "N+" (Probability of >= N)
+        // Usually "7+" means >= 7.
+        // P(>= k) = 1 - CDF(k-1).
+        const pGeMatch = 1 - (k === 0 ? 0 : probLe(cdfFromDist(totalDistFT), k - 1));
+        const pGeHome = 1 - (k === 0 ? 0 : probLe(cdfFromDist(margFT.home), k - 1));
+        const pGeAway = 1 - (k === 0 ? 0 : probLe(cdfFromDist(margFT.away), k - 1));
+        const pGe2H = 1 - (k === 0 ? 0 : probLe(cdfFromDist(totalDist2H), k - 1));
+
+        probsExactGoals.Match[kPlus] = pGeMatch;
+        probsExactGoals.Home[kPlus] = pGeHome;
+        probsExactGoals.Away[kPlus] = pGeAway;
+        probsExactGoals["2H"][kPlus] = pGe2H;
     }
 
     // Winning Margin
@@ -530,96 +560,148 @@ for (const item of items) {
             const p = matrixMatch[h][a];
             if (h > a) {
                 const margin = h - a;
-                const k = margin >= 3 ? "Home by 3+" : `Home by ${margin}`;
+                const k = `Home by ${margin}`;
                 probsMargin[k] = (probsMargin[k] || 0) + p;
+                // Also "Home by 3+" aggregation if needed, but definitions.txt usually lists specific margins
             } else if (a > h) {
                 const margin = a - h;
-                const k = margin >= 3 ? "Away by 3+" : `Away by ${margin}`;
+                const k = `Away by ${margin}`;
                 probsMargin[k] = (probsMargin[k] || 0) + p;
             } else {
-                probsMargin["Draw"] = (probsMargin["Draw"] || 0) + p; // Can be further split if needed
+                probsMargin["Draw"] = (probsMargin["Draw"] || 0) + p;
+                probsMargin["0"] = (probsMargin["0"] || 0) + p; // Sometimes "Score Draw" or "0 Goals"
             }
         }
     }
 
-    const probsOU_Match = calcOUFromDist(totalDistFT, 7.5);
-    const probsOU_1H = calcOUFromDist(totalDistHT, 4.5);
-    const probsOU_2H = calcOUFromDist(totalDist2H, 4.5);
+    // Increased ceilings for production coverage
+    const probsOU_Match = calcOUFromDist(totalDistFT, 12.5);
+    const probsOU_1H = calcOUFromDist(totalDistHT, 6.5);
+    const probsOU_2H = calcOUFromDist(totalDist2H, 6.5);
 
     const probsBTTS = calcBTTS(matrixMatch);
     const probsBTTS_1H = calcBTTS(matrixHT);
     const probsBTTS_2H = calcBTTS(matrix2H);
 
+    // Handicap Result - 1H added
     const handicapLines = [-3, -2, -1, 1, 2, 3];
     const probsHandicap = {};
+    const probsHandicap1H = {};
+
     for (const hcp of handicapLines) {
-        const res = calculateEuropeanHandicap(matrixMatch, hcp, 0);
+        // FT
+        const resFT = calculateEuropeanHandicap(matrixMatch, hcp, 0);
+        // 1H
+        const res1H = calculateEuropeanHandicap(matrixHT, hcp, 0);
+
         const sign = hcp > 0 ? "+" : "";
-        // Ensure consistent formatting
         const normHcp = normalizeLineStr(hcp);
         const signNorm = parseFloat(normHcp) > 0 ? "+" : "";
         const keyNorm = `(${signNorm}${normHcp})`;
 
-        probsHandicap[`1 ${keyNorm}`] = res["1"];
-        probsHandicap[`X ${keyNorm}`] = res["X"];
-        probsHandicap[`2 ${keyNorm}`] = res["2"];
+        probsHandicap[`1 ${keyNorm}`] = resFT["1"];
+        probsHandicap[`X ${keyNorm}`] = resFT["X"];
+        probsHandicap[`2 ${keyNorm}`] = resFT["2"];
+
+        probsHandicap1H[`1 ${keyNorm}`] = res1H["1"];
+        probsHandicap1H[`X ${keyNorm}`] = res1H["X"];
+        probsHandicap1H[`2 ${keyNorm}`] = res1H["2"];
     }
 
-    const probsTotalHome = calcTeamTotalsOU(margFT.home, 4.5);
-    const probsTotalAway = calcTeamTotalsOU(margFT.away, 4.5);
+    const probsTotalHome = calcTeamTotalsOU(margFT.home, 10.5);
+    const probsTotalAway = calcTeamTotalsOU(margFT.away, 10.5);
 
     const cleanSheets = calcCleanSheet(matrixMatch);
     const winToNil = calcWinToNil(matrixMatch);
 
+    // Corners (Average)
     const lambdaCornersHome = clamp((safeNum(home["PassTypes_CK"], 0) + safeNum(away?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersAway = clamp((safeNum(away["PassTypes_CK"], 0) + safeNum(home?.opponent?.["opp_PassTypes_Opp_CK"], 0)) / 2, 0.1, 20);
     const lambdaCornersTotal = clamp(lambdaCornersHome + lambdaCornersAway, 0.2, 30);
-    const probsCornersOU = calcPoissonOU(lambdaCornersTotal, 14.5);
-    const probsCornersHomeOU = calcPoissonOU(lambdaCornersHome, 10.5);
-    const probsCornersAwayOU = calcPoissonOU(lambdaCornersAway, 10.5);
+    const probsCornersOU = calcPoissonOU(lambdaCornersTotal, 20.5);
+    const probsCornersHomeOU = calcPoissonOU(lambdaCornersHome, 12.5);
+    const probsCornersAwayOU = calcPoissonOU(lambdaCornersAway, 12.5);
 
-    const homeCardPoints = safeNum(home["Standard_Stats_CrdY"], 0) + 2 * safeNum(home["Standard_Stats_CrdR"], 0);
-    const awayCardPoints = safeNum(away["Standard_Stats_CrdY"], 0) + 2 * safeNum(away["Standard_Stats_CrdR"], 0);
-    const homeOppCardPoints = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
-    const awayOppCardPoints = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + 2 * safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
+    // Corners 1X2
+    const matrixCorners = generateMatrix(lambdaCornersHome, lambdaCornersAway, 20);
+    const probsCorners1X2 = calc1X2(matrixCorners);
+
+    // Cards (Sum, no 2x multiplier)
+    // CrdY + CrdR
+    const homeCardPoints = safeNum(home["Standard_Stats_CrdY"], 0) + safeNum(home["Standard_Stats_CrdR"], 0);
+    const awayCardPoints = safeNum(away["Standard_Stats_CrdY"], 0) + safeNum(away["Standard_Stats_CrdR"], 0);
+    const homeOppCardPoints = safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + safeNum(home?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
+    const awayOppCardPoints = safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdY"], 0) + safeNum(away?.opponent?.["opp_Standard_Stats_Opp_CrdR"], 0);
 
     const lambdaCardsHome = clamp((homeCardPoints + awayOppCardPoints) / 2, 0.05, 10);
     const lambdaCardsAway = clamp((awayCardPoints + homeOppCardPoints) / 2, 0.05, 10);
     const lambdaCardsTotal = clamp(lambdaCardsHome + lambdaCardsAway, 0.1, 15);
-    const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 6.5);
-    const probsCardsHomeOU = calcPoissonOU(lambdaCardsHome, 5.5);
-    const probsCardsAwayOU = calcPoissonOU(lambdaCardsAway, 5.5);
+    const probsCardsOU = calcPoissonOU(lambdaCardsTotal, 8.5);
+    const probsCardsHomeOU = calcPoissonOU(lambdaCardsHome, 6.5);
+    const probsCardsAwayOU = calcPoissonOU(lambdaCardsAway, 6.5);
 
-    // Shots Markets
+    // Shots (Average)
     const hSoT = safeNum(home["Shooting_SoT"], 0);
     const aSoT = safeNum(away["Shooting_SoT"], 0);
-    // Opponent conceded SoT might be in opp_Shooting_Opp_SoT? Fallback to team SoT if missing.
-    // If stats are missing, clamp prevents NaNs.
-    const hOppSoT = safeNum(home?.opponent?.["opp_Shooting_Opp_SoT"], hSoT); // Self fallback
+    const hOppSoT = safeNum(home?.opponent?.["opp_Shooting_Opp_SoT"], hSoT);
     const aOppSoT = safeNum(away?.opponent?.["opp_Shooting_Opp_SoT"], aSoT);
 
-    const lambdaSoTHome = clamp((hSoT + aOppSoT) / 2, 0.5, 15);
-    const lambdaSoTAway = clamp((aSoT + hOppSoT) / 2, 0.5, 15);
+    const lambdaSoTHome = clamp((hSoT + aOppSoT) / 2, 0.5, 20);
+    const lambdaSoTAway = clamp((aSoT + hOppSoT) / 2, 0.5, 20);
     const lambdaSoTTotal = lambdaSoTHome + lambdaSoTAway;
 
-    const probsSoT_OU = calcPoissonOU(lambdaSoTTotal, 20.5);
+    const probsSoT_OU = calcPoissonOU(lambdaSoTTotal, 25.5);
 
-    // SoT 1x2 using Matrix (20x20 is fast enough)
+    // SoT 1x2 using Matrix (20x20)
     const matrixSoT = generateMatrix(lambdaSoTHome, lambdaSoTAway, 20);
     const probsSoT_1X2 = calc1X2(matrixSoT);
 
     // Half Performance
     const pWin1H = probs1X2_1H["1"];
     const pWin2H = probs1X2_2H["1"];
-    const pWinEither = 1 - ((1 - pWin1H) * (1 - pWin2H)); // Independence approx
-    const pWinBoth = pWin1H * pWin2H;
+
+    // To Score in Both Halves (Independence)
+    // P(Score > 0 in 1H) * P(Score > 0 in 2H)
+    const pScoreHome1H = 1 - probEq(margHT.home, 0);
+    const pScoreHome2H = 1 - probEq(marg2H.home, 0);
+    const pScoreBothHome = pScoreHome1H * pScoreHome2H;
+
+    const pScoreAway1H = 1 - probEq(margHT.away, 0);
+    const pScoreAway2H = 1 - probEq(marg2H.away, 0);
+    const pScoreBothAway = pScoreAway1H * pScoreAway2H;
 
     const probsHalfProps = {
-        "Home to Win Either Half": pWinEither,
-        "Home to Win Both Halves": pWinBoth,
-        // Symmetry for Away
+        "Home to Win Either Half": 1 - ((1 - pWin1H) * (1 - pWin2H)),
+        "Home to Win Both Halves": pWin1H * pWin2H,
         "Away to Win Either Half": 1 - ((1 - probs1X2_1H["2"]) * (1 - probs1X2_2H["2"])),
-        "Away to Win Both Halves": probs1X2_1H["2"] * probs1X2_2H["2"]
+        "Away to Win Both Halves": probs1X2_1H["2"] * probs1X2_2H["2"],
+        "Home Score Both Halves": pScoreBothHome,
+        "Away Score Both Halves": pScoreBothAway
+    };
+
+    // Highest Scoring Half
+    let prob1H_gt_2H = 0;
+    let prob1H_eq_2H = 0;
+    let prob1H_lt_2H = 0;
+
+    // Convolve total goals distributions for 1H and 2H
+    // Range 0..15
+    for(let g1=0; g1<15; g1++) {
+        const p1 = probEq(totalDistHT, g1);
+        if(p1 <= 1e-9) continue;
+        for(let g2=0; g2<15; g2++) {
+            const p2 = probEq(totalDist2H, g2);
+            if(p2 <= 1e-9) continue;
+            const joint = p1 * p2;
+            if (g1 > g2) prob1H_gt_2H += joint;
+            else if (g1 === g2) prob1H_eq_2H += joint;
+            else prob1H_lt_2H += joint;
+        }
+    }
+    const probsHighestScoringHalf = {
+        "First": prob1H_gt_2H,
+        "Equal": prob1H_eq_2H,
+        "Second": prob1H_lt_2H
     };
 
     const comboBTTS = {
@@ -631,6 +713,15 @@ for (const item of items) {
         "Away/No": sumProb(matrixMatch, (h, a) => a > h && (h === 0 || a === 0)),
     };
 
+    // Total Goals / BTTS
+    // e.g. "Over 2.5 & Yes"
+    const probsTotalGoalsBTTS = {
+        "Over 2.5 & Yes": sumProb(matrixMatch, (h, a) => (h+a) > 2.5 && h>0 && a>0),
+        "Over 2.5 & No": sumProb(matrixMatch, (h, a) => (h+a) > 2.5 && (h===0 || a===0)),
+        "Under 2.5 & Yes": sumProb(matrixMatch, (h, a) => (h+a) < 2.5 && h>0 && a>0), // Rare (1-1 only)
+        "Under 2.5 & No": sumProb(matrixMatch, (h, a) => (h+a) < 2.5 && (h===0 || a===0))
+    };
+
     const comboResultTotal = {
         "Home/Over 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) > 2.5),
         "Draw/Over 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) > 2.5),
@@ -638,6 +729,17 @@ for (const item of items) {
         "Home/Under 2.5": sumProb(matrixMatch, (h, a) => h > a && (h + a) < 2.5),
         "Draw/Under 2.5": sumProb(matrixMatch, (h, a) => h === a && (h + a) < 2.5),
         "Away/Under 2.5": sumProb(matrixMatch, (h, a) => a > h && (h + a) < 2.5),
+    };
+
+    // RTG_H1 (HT Result + 1H Goals OU 1.5)
+    // 6 outcomes: 1&O, X&O, 2&O, 1&U, X&U, 2&U
+    const probsRTG_H1 = {
+        "1 & Over 1.5": sumProb(matrixHT, (h, a) => h > a && (h+a) > 1.5),
+        "X & Over 1.5": sumProb(matrixHT, (h, a) => h === a && (h+a) > 1.5),
+        "2 & Over 1.5": sumProb(matrixHT, (h, a) => a > h && (h+a) > 1.5),
+        "1 & Under 1.5": sumProb(matrixHT, (h, a) => h > a && (h+a) < 1.5),
+        "X & Under 1.5": sumProb(matrixHT, (h, a) => h === a && (h+a) < 1.5),
+        "2 & Under 1.5": sumProb(matrixHT, (h, a) => a > h && (h+a) < 1.5),
     };
 
     const fairOdds = {
@@ -652,6 +754,10 @@ for (const item of items) {
         "DNB": {
             "1": toOdds(probsDNB["1"]),
             "2": toOdds(probsDNB["2"])
+        },
+        "Home_Away": { // 2-way Winner (Draw Loses) - No normalization
+            "Home": toOdds(probs1X2["1"]),
+            "Away": toOdds(probs1X2["2"])
         },
         "DNB_1H": {
             "1": toOdds(probsDNB_1H["1"]),
@@ -668,10 +774,12 @@ for (const item of items) {
         "OverUnder_1H": convertObjToOdds(probsOU_1H),
         "OverUnder_2H": convertObjToOdds(probsOU_2H),
         "Handicap": convertObjToOdds(probsHandicap),
+        "Handicap_1H": convertObjToOdds(probsHandicap1H), // Added per request in Definition of bets
         "ht_ft": convertObjToOdds(probsHTFT),
         "Corners_OU": convertObjToOdds(probsCornersOU),
         "Corners_Home": convertObjToOdds(probsCornersHomeOU),
         "Corners_Away": convertObjToOdds(probsCornersAwayOU),
+        "Corners_1X2": convertObjToOdds(probsCorners1X2),
         "Cards_OU": convertObjToOdds(probsCardsOU),
         "Cards_Home": convertObjToOdds(probsCardsHomeOU),
         "Cards_Away": convertObjToOdds(probsCardsAwayOU),
@@ -686,6 +794,8 @@ for (const item of items) {
         },
         "Combo_Result_BTTS": convertObjToOdds(comboBTTS),
         "Combo_Result_Total": convertObjToOdds(comboResultTotal),
+        "Combo_TotalGoals_BTTS": convertObjToOdds(probsTotalGoalsBTTS),
+        "RTG_H1": convertObjToOdds(probsRTG_H1),
         // New Markets
         "Exact_Goals_Match": convertObjToOdds(probsExactGoals.Match),
         "Exact_Goals_Home": convertObjToOdds(probsExactGoals.Home),
@@ -694,7 +804,8 @@ for (const item of items) {
         "Winning_Margin": convertObjToOdds(probsMargin),
         "Shots_OU": convertObjToOdds(probsSoT_OU),
         "Shots_1X2": convertObjToOdds(probsSoT_1X2),
-        "Half_Props": convertObjToOdds(probsHalfProps)
+        "Half_Props": convertObjToOdds(probsHalfProps),
+        "Highest_Scoring_Half": convertObjToOdds(probsHighestScoringHalf)
     };
 
     const predictions = {
@@ -706,8 +817,8 @@ for (const item of items) {
     let valueBets = [];
     const seenFairOdds = new Map();
 
-    if (data.bookmaker_odds) {
-        const bookie = data.bookmaker_odds;
+    if (bookmaker_odds) {
+        const bookie = bookmaker_odds;
 
         const pushValue = (market, outcome, fairOdd, bookieOdd, devig) => {
             const b = safeNum(bookieOdd, 0);
@@ -789,15 +900,16 @@ for (const item of items) {
         check3Way("1X2_2H", ["1", "X", "2"]);
         // Shot 1x2
         check3Way("Shots_1X2", ["1", "X", "2"]);
+        // Corners 1X2
+        check3Way("Corners_1X2", ["1", "X", "2"]);
+        // Highest Scoring Half
+        check3Way("Highest_Scoring_Half", ["First", "Equal", "Second"]);
 
         const checkGeneric = (marketKey) => {
             const bM = bookie[marketKey];
             const fM = fairOdds[marketKey];
             if (!bM || !fM) return;
             for (const k in bM) {
-                // Fuzzy match or exact? Exact for Exact Goals.
-                // Winning Margin keys in fairOdds: "Home by 1", etc.
-                // Check if key exists in fairOdds directly.
                 if (fM[k]) {
                     pushValue(marketKey, k, fM[k], bM[k], devigProportional(bM, k));
                 }
@@ -809,6 +921,8 @@ for (const item of items) {
         checkGeneric("Exact_Goals_2H");
         checkGeneric("Winning_Margin");
         checkGeneric("Half_Props");
+        checkGeneric("Combo_TotalGoals_BTTS");
+        checkGeneric("RTG_H1");
 
         const check2Way = (marketKey, outcomes) => {
             const bM = bookie[marketKey];
@@ -832,6 +946,7 @@ for (const item of items) {
         check2Way("BTTS_2H", ["Yes", "No"]);
         check2Way("clean_sheet_home", ["Yes", "No"]);
         check2Way("clean_sheet_away", ["Yes", "No"]);
+        check2Way("Home_Away", ["Home", "Away"]); // Raw 2-way
         if (bookie["WinToNil"] && bookie["WinToNil"]["No"]) check3Way("WinToNil", ["Home", "Away", "No"]);
 
         if (bookie["DoubleChance"] && fairOdds["DoubleChance"]) {
@@ -867,12 +982,11 @@ for (const item of items) {
                 const isGoalOrTeamTotal = ["OverUnder", "OverUnder_1H", "OverUnder_2H", "Total_Home", "Total_Away"].includes(marketKey);
                 if (isGoalOrTeamTotal && isInteger) return;
 
-                // Whitelist for Integers: Only Cards & Corners allowed.
-                // Updated V16: "Integer lines are permitted ONLY for Corners and Cards."
-                // Includes Team Corners/Cards.
+                // Whitelist for Integers: Corners, Cards, Shots
                 const allowedIntegerMarkets = [
                     "Corners_OU", "Corners_Home", "Corners_Away",
-                    "Cards_OU", "Cards_Home", "Cards_Away"
+                    "Cards_OU", "Cards_Home", "Cards_Away",
+                    "Shots_OU"
                 ];
                 if (isInteger && !allowedIntegerMarkets.includes(marketKey)) return;
 
@@ -1021,6 +1135,7 @@ for (const item of items) {
         };
 
         checkHandicapMarket("Handicap");
+        checkHandicapMarket("Handicap_1H"); // Re-enabled for V16
 
         ["Combo_Result_BTTS", "Combo_Result_Total", "ht_ft"].forEach(marketKey => {
             const bM = bookie[marketKey];
