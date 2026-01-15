@@ -1048,7 +1048,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 1,
@@ -1059,7 +1059,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 1,
@@ -1070,7 +1070,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 1,
@@ -1081,7 +1081,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 2,
@@ -1092,7 +1092,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 2,
@@ -1103,7 +1103,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 3,
@@ -1114,7 +1114,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 3,
@@ -1125,7 +1125,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 3,
@@ -1136,7 +1136,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1147,7 +1147,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1158,7 +1158,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1169,7 +1169,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1180,7 +1180,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1191,7 +1191,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1202,29 +1202,29 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
         "betName": "Goals Over/Under",
         "selection": "Over 0.5",
-        "odd": 1.02
+        "odd": 1.01
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
         "betName": "Goals Over/Under",
         "selection": "Under 0.5",
-        "odd": 17
+        "odd": 21
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1235,7 +1235,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1246,7 +1246,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1257,7 +1257,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1268,7 +1268,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1279,7 +1279,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1290,7 +1290,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1301,7 +1301,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1312,7 +1312,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1323,7 +1323,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 5,
@@ -1334,7 +1334,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1345,7 +1345,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1356,7 +1356,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1367,7 +1367,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1378,7 +1378,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1389,7 +1389,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1400,7 +1400,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1411,7 +1411,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 6,
@@ -1422,7 +1422,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1433,7 +1433,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1444,7 +1444,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1455,7 +1455,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1466,7 +1466,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1477,7 +1477,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1488,7 +1488,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1499,7 +1499,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1510,7 +1510,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1521,7 +1521,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 26,
@@ -1532,7 +1532,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1543,7 +1543,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1554,7 +1554,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1565,7 +1565,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1576,7 +1576,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1587,7 +1587,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1598,7 +1598,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1609,7 +1609,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
@@ -1620,18 +1620,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 7,
         "betName": "HT/FT Double",
         "selection": "Away/Away",
-        "odd": 3.2
+        "odd": 3.1
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 27,
@@ -1642,7 +1642,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 27,
@@ -1653,7 +1653,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 28,
@@ -1664,7 +1664,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 28,
@@ -1675,7 +1675,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 8,
@@ -1686,7 +1686,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 8,
@@ -1697,7 +1697,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1708,7 +1708,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1719,7 +1719,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1730,7 +1730,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1741,7 +1741,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1752,18 +1752,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
         "betName": "Handicap Result",
         "selection": "Away -2",
-        "odd": 1.1
+        "odd": 1.09
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1774,7 +1774,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1785,29 +1785,29 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
         "betName": "Handicap Result",
         "selection": "Away +1",
-        "odd": 3.4
+        "odd": 3.25
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
         "betName": "Handicap Result",
         "selection": "Home +2",
-        "odd": 1.3
+        "odd": 1.33
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1818,7 +1818,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1829,18 +1829,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
         "betName": "Handicap Result",
         "selection": "Home +3",
-        "odd": 1.09
+        "odd": 1.1
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1851,7 +1851,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 9,
@@ -1862,7 +1862,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1873,7 +1873,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1884,7 +1884,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1895,7 +1895,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1906,7 +1906,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1917,7 +1917,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1928,7 +1928,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1939,7 +1939,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1950,7 +1950,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1961,7 +1961,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1972,7 +1972,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1983,7 +1983,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -1994,7 +1994,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2005,7 +2005,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2016,18 +2016,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
         "betName": "Exact Score",
         "selection": "1:2",
-        "odd": 10
+        "odd": 9.5
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2038,7 +2038,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2049,7 +2049,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2060,7 +2060,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2071,7 +2071,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2082,7 +2082,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2093,7 +2093,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2104,7 +2104,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2115,7 +2115,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2126,7 +2126,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2137,7 +2137,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2148,7 +2148,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2159,7 +2159,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2170,7 +2170,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2181,7 +2181,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2192,7 +2192,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2203,7 +2203,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2214,7 +2214,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2225,7 +2225,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2236,7 +2236,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2247,7 +2247,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2258,18 +2258,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
         "betName": "Exact Score",
         "selection": "5:3",
-        "odd": 151
+        "odd": 201
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2280,7 +2280,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2291,7 +2291,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2302,7 +2302,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 10,
@@ -2313,7 +2313,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 11,
@@ -2324,7 +2324,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 11,
@@ -2335,7 +2335,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 11,
@@ -2346,7 +2346,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2357,7 +2357,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2368,18 +2368,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
         "betName": "Correct Score - First Half",
         "selection": "2:1",
-        "odd": 19
+        "odd": 21
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2390,7 +2390,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2401,7 +2401,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2412,18 +2412,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
         "betName": "Correct Score - First Half",
         "selection": "4:0",
-        "odd": 151
+        "odd": 201
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2434,7 +2434,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2445,7 +2445,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2456,7 +2456,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2467,7 +2467,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2478,7 +2478,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2489,7 +2489,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2500,7 +2500,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2511,7 +2511,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2522,7 +2522,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2533,7 +2533,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2544,7 +2544,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2555,7 +2555,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2566,7 +2566,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2577,7 +2577,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2588,7 +2588,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2599,7 +2599,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 31,
@@ -2610,7 +2610,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 12,
@@ -2621,7 +2621,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 12,
@@ -2632,7 +2632,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 12,
@@ -2643,18 +2643,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 13,
         "betName": "First Half Winner",
         "selection": "Home",
-        "odd": 3.6
+        "odd": 3.75
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 13,
@@ -2665,40 +2665,40 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 13,
         "betName": "First Half Winner",
         "selection": "Away",
-        "odd": 2.5
+        "odd": 2.4
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 14,
         "betName": "Team To Score First",
         "selection": "Home",
-        "odd": 2.2
+        "odd": 2.1
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 14,
         "betName": "Team To Score First",
         "selection": "Draw",
-        "odd": 19
+        "odd": 21
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 14,
@@ -2709,7 +2709,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 15,
@@ -2720,7 +2720,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 15,
@@ -2731,7 +2731,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 15,
@@ -2742,18 +2742,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 32,
         "betName": "Win Both Halves",
         "selection": "Home",
-        "odd": 11
+        "odd": 13
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 32,
@@ -2764,51 +2764,51 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
         "betName": "Total - Home",
         "selection": "Over 1.5",
-        "odd": 2.2
+        "odd": 2.25
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
         "betName": "Total - Home",
         "selection": "Under 1.5",
-        "odd": 1.62
+        "odd": 1.57
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
         "betName": "Total - Home",
         "selection": "Over 2.5",
-        "odd": 5
+        "odd": 5.5
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
         "betName": "Total - Home",
         "selection": "Under 2.5",
-        "odd": 1.17
+        "odd": 1.14
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2819,7 +2819,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2830,7 +2830,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2841,7 +2841,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2852,7 +2852,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2863,7 +2863,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 16,
@@ -2874,7 +2874,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2885,7 +2885,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2896,29 +2896,29 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
         "betName": "Total - Away",
         "selection": "Over 2.5",
-        "odd": 3.25
+        "odd": 3
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
         "betName": "Total - Away",
         "selection": "Under 2.5",
-        "odd": 1.33
+        "odd": 1.36
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2929,7 +2929,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2940,7 +2940,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2951,7 +2951,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2962,7 +2962,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2973,7 +2973,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2984,7 +2984,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -2995,7 +2995,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 17,
@@ -3006,7 +3006,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3017,7 +3017,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3028,7 +3028,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3039,18 +3039,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
         "betName": "Handicap Result - First Half",
         "selection": "Home +1",
-        "odd": 1.5
+        "odd": 1.53
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3061,7 +3061,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3072,7 +3072,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3083,7 +3083,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3094,7 +3094,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3105,7 +3105,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3116,7 +3116,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3127,7 +3127,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 18,
@@ -3138,18 +3138,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 20,
         "betName": "Double Chance - First Half",
         "selection": "Home/Draw",
-        "odd": 1.5
+        "odd": 1.53
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 20,
@@ -3160,40 +3160,40 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 20,
         "betName": "Double Chance - First Half",
         "selection": "Draw/Away",
-        "odd": 1.28
+        "odd": 1.25
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 34,
         "betName": "Both Teams Score - First Half",
         "selection": "Yes",
-        "odd": 3.4
+        "odd": 3.5
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 34,
         "betName": "Both Teams Score - First Half",
         "selection": "No",
-        "odd": 1.3
+        "odd": 1.28
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 35,
@@ -3204,7 +3204,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 35,
@@ -3215,7 +3215,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 36,
@@ -3226,7 +3226,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 36,
@@ -3237,7 +3237,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3248,7 +3248,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3259,7 +3259,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3270,7 +3270,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3281,7 +3281,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3292,7 +3292,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3303,7 +3303,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3314,7 +3314,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 38,
@@ -3325,7 +3325,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 39,
@@ -3336,7 +3336,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 39,
@@ -3347,7 +3347,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 40,
@@ -3358,7 +3358,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 40,
@@ -3369,7 +3369,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 40,
@@ -3380,7 +3380,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 40,
@@ -3391,7 +3391,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 41,
@@ -3402,7 +3402,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 41,
@@ -3413,7 +3413,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 41,
@@ -3424,18 +3424,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 41,
         "betName": "Away Team Exact Goals Number",
         "selection": "more 3",
-        "odd": 3.25
+        "odd": 3
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3446,7 +3446,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3457,7 +3457,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3468,7 +3468,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3479,7 +3479,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3490,7 +3490,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 42,
@@ -3501,7 +3501,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
@@ -3512,7 +3512,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
@@ -3523,18 +3523,18 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
         "betName": "Results/Both Teams Score",
         "selection": "Away/Yes",
-        "odd": 3.25
+        "odd": 3.2
       },
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
@@ -3545,7 +3545,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
@@ -3556,7 +3556,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 24,
@@ -3567,7 +3567,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3578,7 +3578,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3589,7 +3589,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3600,7 +3600,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3611,7 +3611,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3622,7 +3622,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 25,
@@ -3633,7 +3633,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 54,
@@ -3644,7 +3644,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 54,
@@ -3655,7 +3655,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 54,
@@ -3666,7 +3666,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 55,
@@ -3677,7 +3677,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 55,
@@ -3688,7 +3688,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 55,
@@ -3699,7 +3699,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 45,
@@ -3710,7 +3710,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 45,
@@ -3721,7 +3721,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3732,7 +3732,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3743,7 +3743,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3754,7 +3754,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3765,7 +3765,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3776,7 +3776,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 46,
@@ -3787,7 +3787,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3798,7 +3798,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3809,7 +3809,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3820,7 +3820,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3831,7 +3831,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3842,7 +3842,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3853,7 +3853,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3864,7 +3864,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3875,7 +3875,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3886,7 +3886,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 47,
@@ -3897,7 +3897,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 48,
@@ -3908,7 +3908,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 48,
@@ -3919,7 +3919,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 49,
@@ -3930,7 +3930,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 49,
@@ -3941,7 +3941,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 49,
@@ -3952,7 +3952,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 49,
@@ -3963,7 +3963,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -3974,7 +3974,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -3985,7 +3985,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -3996,7 +3996,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4007,7 +4007,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4018,7 +4018,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4029,7 +4029,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4040,7 +4040,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4051,7 +4051,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4062,7 +4062,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 50,
@@ -4073,7 +4073,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4084,7 +4084,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4095,7 +4095,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4106,7 +4106,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4117,7 +4117,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4128,7 +4128,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 72,
@@ -4139,7 +4139,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 57,
@@ -4150,7 +4150,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 57,
@@ -4161,7 +4161,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 58,
@@ -4172,7 +4172,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 58,
@@ -4183,7 +4183,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 58,
@@ -4194,7 +4194,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 58,
@@ -4205,7 +4205,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 59,
@@ -4216,7 +4216,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 59,
@@ -4227,7 +4227,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4238,7 +4238,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4249,7 +4249,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4260,7 +4260,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4271,7 +4271,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4282,7 +4282,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4293,7 +4293,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4304,7 +4304,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4315,7 +4315,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4326,7 +4326,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4337,7 +4337,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4348,7 +4348,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4359,7 +4359,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4370,7 +4370,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4381,7 +4381,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4392,7 +4392,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4403,7 +4403,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4414,7 +4414,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4425,7 +4425,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4436,7 +4436,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4447,7 +4447,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4458,7 +4458,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4469,7 +4469,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4480,7 +4480,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4491,7 +4491,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4502,7 +4502,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4513,7 +4513,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4524,7 +4524,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4535,7 +4535,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4546,7 +4546,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4557,7 +4557,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4568,7 +4568,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4579,7 +4579,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4590,7 +4590,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4601,7 +4601,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4612,7 +4612,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4623,7 +4623,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4634,7 +4634,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4645,7 +4645,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 85,
@@ -4656,7 +4656,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 77,
@@ -4667,7 +4667,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 77,
@@ -4678,7 +4678,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 77,
@@ -4689,7 +4689,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 77,
@@ -4700,7 +4700,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 77,
@@ -4711,7 +4711,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4722,7 +4722,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4733,7 +4733,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4744,7 +4744,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4755,7 +4755,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4766,7 +4766,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 78,
@@ -4777,7 +4777,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 80,
@@ -4788,7 +4788,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 80,
@@ -4799,7 +4799,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 82,
@@ -4810,7 +4810,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 82,
@@ -4821,7 +4821,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 83,
@@ -4832,7 +4832,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 83,
@@ -4843,7 +4843,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 87,
@@ -4854,7 +4854,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 87,
@@ -4865,7 +4865,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 176,
@@ -4876,7 +4876,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 176,
@@ -4887,7 +4887,7 @@
       {
         "fixtureId": 1379184,
         "leagueId": 39,
-        "updated": "2026-01-14T02:15:30+00:00",
+        "updated": "2026-01-15T02:01:18+00:00",
         "bookmakerId": 8,
         "bookmakerName": "Bet365",
         "betId": 176,
