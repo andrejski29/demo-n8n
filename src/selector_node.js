@@ -1,20 +1,21 @@
 
 // ==================== // CONFIG & THRESHOLDS // ====================
 
-const PROB_CAP_GLOBAL = 0.95; // Anti-overconfidence (Global)
-const PROB_CAP_CORE = 0.90;   // Stricter for CORE/Combos
+const PROB_CAP_GLOBAL = 0.95;
+const PROB_CAP_CORE = 0.90;
 
-const ODDS_FLOOR = 1.40; // Reject if bookie odd < 1.40
-const EDGE_FLOOR = 15;   // Reject if edge < 15% (Hard baseline)
-const RATING_FLOOR_GLOBAL = 48; // Lowered from 55 to 48
+const ODDS_FLOOR = 1.40;
+const EDGE_FLOOR = 15;
+const RATING_FLOOR_GLOBAL = 48;
 
 const OVERROUND_MIN = 1.00;
-const OVERROUND_MAX = 1.12; // Widened from 1.08 to 1.12
+const OVERROUND_MAX = 1.12;
 
 // Market Gates
 const MARKET_1H_ODDS_MIN = 2.20;
 const MARKET_1H_EDGE_MIN = 30;
 const MARKET_1H_RATING_MIN = 48;
+const MARKET_1H_PROB_MIN = 0.30; // Added Prob Floor for 1X2_1H
 
 // Telegram Scoring
 const BONUS_ODDS_MIN = 1.80;
@@ -30,21 +31,21 @@ const SOFT_PENALTY_SCORE = 5;
 const CORE_PROB_MIN = 0.55;
 const CORE_PROB_MAX = 0.85;
 const CORE_ODDS_MIN = 1.50;
-const CORE_ODDS_MAX = 2.20; // Optional 2.40 if needed
+const CORE_ODDS_MAX = 2.20;
 const CORE_EDGE_MIN = 15;
-const CORE_RATING_MIN = 48; // Tier specific
-const STAKE_CORE = 1.0;
+const CORE_RATING_MIN = 48;
+const STAKE_CORE = 1.0; // Confirmed 1.0u
 
 // Classification - VALUE (Silver)
 const VALUE_ODDS_MIN = 2.20;
 const VALUE_PROB_MIN = 0.35;
-const VALUE_EDGE_MIN = 30; // Stricter edge for Value
+const VALUE_EDGE_MIN = 30;
 const VALUE_RATING_MIN = 48;
 const STAKE_VALUE = 0.5;
 
 // Classification - HIGH_UPSIDE
 const UPSIDE_ODDS_MIN = 3.00;
-const UPSIDE_PROB_MIN = 0.295; // 29.5%
+const UPSIDE_PROB_MIN = 0.295;
 const UPSIDE_EDGE_MIN = 30;
 const UPSIDE_RATING_MIN = 48;
 const STAKE_UPSIDE = 0.25;
@@ -53,9 +54,11 @@ const STAKE_UPSIDE = 0.25;
 const COMBO_ODDS_MIN = 2.10;
 const COMBO_ODDS_MAX = 3.00;
 const STAKE_COMBO = 0.5;
+const COMBO_USE_AFTER_TOP_CORE = 3; // Use core picks ranked 4+
 
 // Fun Combo (Treble/4-fold)
-const FUN_COMBO_MIN_TOTAL = 8.00;
+const FUN_COMBO_MIN_TOTAL = 8.00; // Default 8.0
+const FUN_COMBO_STRICT_TOTAL = 10.00; // Switchable
 const FUN_COMBO_MAX_LEGS = 4;
 const STAKE_FUN = 0.25;
 const FUN_MARKET_BLACKLIST = ["Exact_Goals_Match", "Exact_Goals_Home", "Exact_Goals_Away", "Exact_Goals_2H", "ht_ft", "Combo_Result_BTTS", "Combo_Result_Total", "Combo_TotalGoals_BTTS", "Winning_Margin"];
@@ -86,6 +89,9 @@ const buildTelegramBlock = (dayObj) => {
     lines.push("");
 
     // Core Singles
+    // We display "Top 3" specifically, then mention others?
+    // Spec: "Output core_singles as ALL core picks... Telegram block can show Top 3 + Others"
+    // Let's list top 3 full details, then just count.
     const topCore = dayObj.packs.core_singles.slice(0, 3);
     const extraCore = dayObj.packs.core_singles.slice(3);
 
@@ -120,7 +126,6 @@ const buildTelegramBlock = (dayObj) => {
     // Value Picks
     if (dayObj.packs.value_picks.length > 0) {
         lines.push(`💎 *VALUE SINGLES (Silver)*`);
-        // Show top 3 value picks if many? Or just list them. Let's list top 3.
         const topValue = dayObj.packs.value_picks.slice(0, 3);
         topValue.forEach(v => {
             lines.push(`• *${v.match}*`);
@@ -227,7 +232,8 @@ const filteredBets = bets.filter(b => {
     if (b.market === "1X2_1H") {
         if (b.bookie_odd_num < MARKET_1H_ODDS_MIN ||
             b.edge_percent_num < MARKET_1H_EDGE_MIN ||
-            b.rating_score_num < MARKET_1H_RATING_MIN) {
+            b.rating_score_num < MARKET_1H_RATING_MIN ||
+            b.fair_prob_num < MARKET_1H_PROB_MIN) { // Added Prob Floor
             return false;
         }
     }
@@ -280,39 +286,13 @@ for (const b of uniqueBets) {
     b.telegram_score = ts;
 }
 
-// --- Step E: Classification (3 Tiers) ---
+// --- Step E: Classification (3 Tiers - Odds First) ---
 const classified = uniqueBets.map(b => {
     let tier = "OTHER";
     let units = 0;
 
-    // CORE Logic
+    // 1. HIGH_UPSIDE (Risky / Longshot)
     if (
-        b.fair_prob_num >= CORE_PROB_MIN &&
-        b.fair_prob_num <= CORE_PROB_MAX && // Strictly <= 0.85 per spec? Spec said 0.85. PROB_CAP_CORE is 0.90 for combos.
-        // Actually Spec says: CORE_PROB_MAX = 0.85.
-        // Also "CORE: fair_prob_raw <= 0.90". Let's respect the CORE_PROB_MAX constant.
-        // If prob is 0.88, it's not CORE per range (0.55-0.85).
-        // Can it be VALUE? Value min prob 0.35. Yes.
-        b.bookie_odd_num >= CORE_ODDS_MIN &&
-        b.bookie_odd_num <= CORE_ODDS_MAX &&
-        b.edge_percent_num >= CORE_EDGE_MIN &&
-        b.rating_score_num >= CORE_RATING_MIN
-    ) {
-        tier = "CORE";
-        units = STAKE_CORE;
-    }
-    // VALUE Logic
-    else if (
-        b.edge_percent_num >= VALUE_EDGE_MIN &&
-        b.bookie_odd_num > VALUE_ODDS_MIN && // > 2.20
-        b.fair_prob_num >= VALUE_PROB_MIN &&
-        b.rating_score_num >= VALUE_RATING_MIN
-    ) {
-        tier = "VALUE";
-        units = STAKE_VALUE;
-    }
-    // HIGH_UPSIDE Logic
-    else if (
         b.bookie_odd_num >= UPSIDE_ODDS_MIN &&
         b.fair_prob_num >= UPSIDE_PROB_MIN &&
         b.edge_percent_num >= UPSIDE_EDGE_MIN &&
@@ -321,8 +301,29 @@ const classified = uniqueBets.map(b => {
         tier = "HIGH_UPSIDE";
         units = STAKE_UPSIDE;
     }
+    // 2. VALUE (Silver) - Higher Odds/Edge
+    else if (
+        b.bookie_odd_num >= VALUE_ODDS_MIN && // Fixed > to >=
+        b.fair_prob_num >= VALUE_PROB_MIN &&
+        b.edge_percent_num >= VALUE_EDGE_MIN &&
+        b.rating_score_num >= VALUE_RATING_MIN
+    ) {
+        tier = "VALUE";
+        units = STAKE_VALUE;
+    }
+    // 3. CORE (Gold) - Stable
+    else if (
+        b.fair_prob_num >= CORE_PROB_MIN &&
+        b.fair_prob_num <= CORE_PROB_MAX &&
+        b.bookie_odd_num >= CORE_ODDS_MIN &&
+        b.bookie_odd_num <= CORE_ODDS_MAX &&
+        b.edge_percent_num >= CORE_EDGE_MIN &&
+        b.rating_score_num >= CORE_RATING_MIN
+    ) {
+        tier = "CORE";
+        units = STAKE_CORE;
+    }
 
-    // Keep if tier is assigned
     return { ...b, tier, units };
 }).filter(b => b.tier !== "OTHER");
 
@@ -337,7 +338,8 @@ for (const b of classified) {
     days[b.fixture_day].push(b);
 }
 
-const output = [];
+// Flattened output accumulator
+const flattenedItems = [];
 
 for (const dayStr in days) {
     const dayPicks = days[dayStr];
@@ -349,55 +351,61 @@ for (const dayStr in days) {
     const valuePicks = dayPicks.filter(p => p.tier === "VALUE");
     const upsidePicks = dayPicks.filter(p => p.tier === "HIGH_UPSIDE");
 
-    // 1. Core Singles (All of them)
-    // No hard cap, just output list. Telegram block handles display limits.
+    // 1. Core Singles
+    // Use ALL core picks
 
     // 2. Smart Combo (Double) - Allow up to 2
     const smartCombos = [];
-    const usedInCombo = new Set();
+    const usedInSmartCombo = new Set();
 
-    // Candidates for Smart Combo: Must be CORE, Prob <= PROB_CAP_CORE (0.90)
-    const comboCandidates = corePicks.filter(p => p.fair_prob_num <= PROB_CAP_CORE);
+    // Candidates: Core picks ranked 4+ (index 3+)
+    // If fewer than COMBO_USE_AFTER_TOP_CORE, we might have no candidates for combo if strictly following rule
+    // "Build smart combos after top CORE singles (configurable)"
+    const comboCandidates = corePicks.slice(COMBO_USE_AFTER_TOP_CORE).filter(p => p.fair_prob_num <= PROB_CAP_CORE);
 
-    // Greedy search for pairs
-    // Attempt 1: Default pairing (by rank)
-    // Attempt 2: Optimize score
+    // Greedy search for pairs OPTIMIZED (max score sum)
+    while (comboCandidates.length >= 2 && smartCombos.length < 2) {
+        let bestPair = null;
+        let bestScoreSum = -Infinity;
+        let p1Index = -1;
+        let p2Index = -1;
 
-    // We iterate through sorted candidates
-    for (let i = 0; i < comboCandidates.length; i++) {
-        if (usedInCombo.has(comboCandidates[i].fixture_id)) continue;
+        for (let i = 0; i < comboCandidates.length; i++) {
+            if (usedInSmartCombo.has(comboCandidates[i].fixture_id)) continue;
+            for (let j = i + 1; j < comboCandidates.length; j++) {
+                if (usedInSmartCombo.has(comboCandidates[j].fixture_id)) continue;
 
-        let bestMate = null;
-        let bestMateIdx = -1;
+                const p1 = comboCandidates[i];
+                const p2 = comboCandidates[j];
 
-        for (let j = i + 1; j < comboCandidates.length; j++) {
-            if (usedInCombo.has(comboCandidates[j].fixture_id)) continue;
+                // Anti-correlation: Fixtures must be distinct
+                if (p1.fixture_id === p2.fixture_id) continue;
 
-            const p1 = comboCandidates[i];
-            const p2 = comboCandidates[j];
-
-            // Check anti-correlation (fixture_id distinct) - already guaranteed by dedup logic generally,
-            // but dedup was per fixture. So yes, distinct fixtures.
-
-            const total = p1.bookie_odd_num * p2.bookie_odd_num;
-            if (total >= COMBO_ODDS_MIN && total <= COMBO_ODDS_MAX) {
-                // Found a valid pair. Since list is sorted by score, this is likely a high score pair.
-                // We pick the first valid match to prioritize higher ranked seeds.
-                bestMate = p2;
-                bestMateIdx = j;
-                break;
+                const total = p1.bookie_odd_num * p2.bookie_odd_num;
+                if (total >= COMBO_ODDS_MIN && total <= COMBO_ODDS_MAX) {
+                    const s = p1.telegram_score + p2.telegram_score;
+                    if (s > bestScoreSum) {
+                        bestScoreSum = s;
+                        bestPair = [p1, p2];
+                        p1Index = i;
+                        p2Index = j;
+                    }
+                }
             }
         }
 
-        if (bestMate) {
+        if (bestPair) {
             smartCombos.push({
-                legs: [comboCandidates[i], bestMate],
-                total_odds: comboCandidates[i].bookie_odd_num * bestMate.bookie_odd_num,
+                legs: bestPair,
+                total_odds: bestPair[0].bookie_odd_num * bestPair[1].bookie_odd_num,
                 units: STAKE_COMBO
             });
-            usedInCombo.add(comboCandidates[i].fixture_id);
-            usedInCombo.add(bestMate.fixture_id);
-            if (smartCombos.length >= 2) break; // Max 2 combos
+            usedInSmartCombo.add(bestPair[0].fixture_id);
+            usedInSmartCombo.add(bestPair[1].fixture_id);
+            // Remove used from candidates to avoid re-checking?
+            // Or just rely on usedInSmartCombo set. Set is cleaner.
+        } else {
+            break; // No valid pairs found
         }
     }
 
@@ -405,44 +413,104 @@ for (const dayStr in days) {
     let funCombo = null;
 
     // Pool: VALUE + HIGH_UPSIDE (Preferred) + CORE (Backfill)
-    // Filter unsafe markets
     const isSafeForFun = (p) => !FUN_MARKET_BLACKLIST.includes(p.market);
 
-    let funPool = [...valuePicks, ...upsidePicks].filter(isSafeForFun);
-    funPool.sort((a,b) => b.telegram_score - a.telegram_score);
+    const preferredPool = [...valuePicks, ...upsidePicks].filter(isSafeForFun);
+    const backfillPool = corePicks.filter(isSafeForFun); // Can use any core? Yes.
 
-    // If we need more legs, add Core (excluding those used in smart combos? Maybe better to re-use if needed, but anti-correlation implies distinct matches in THE SAME combo. Across combos is debatable, but let's try to keep distinct if possible).
-    // Let's just use all safe Core picks.
-    const safeCore = corePicks.filter(isSafeForFun);
+    // Requirement: "Require at least 1 VALUE or HIGH_UPSIDE leg if there is at least one available"
+    const mustIncludePreferred = preferredPool.length > 0;
 
-    // Combine: High Priority first
-    let candidatesFun = [...funPool, ...safeCore];
-    // Unique by fixture (just in case logic changes)
-    candidatesFun = candidatesFun.filter((p, index, self) =>
-        index === self.findIndex((t) => (t.fixture_id === p.fixture_id))
-    );
+    // Combine for search
+    // We want to maximize score sum given constraints.
+    // Full search might be expensive if many picks. Bounded search: Top N.
+    const TOP_N_SEARCH = 12;
+    const allFunCandidates = [...preferredPool, ...backfillPool]
+        .sort((a,b) => b.telegram_score - a.telegram_score)
+        .slice(0, TOP_N_SEARCH); // Optimization
 
-    // Try to build 3 legs >= MIN_TOTAL
-    // Simple greedy approach
-    if (candidatesFun.length >= 3) {
-        // Try top 3
-        let legs = candidatesFun.slice(0, 3);
-        let total = legs.reduce((acc, p) => acc * p.bookie_odd_num, 1);
+    // Bounded Search 3 or 4 legs
+    let bestFun = null;
+    let bestFunScore = -Infinity;
 
-        if (total < FUN_COMBO_MIN_TOTAL && candidatesFun.length >= 4) {
-            // Try 4 legs
-            legs = candidatesFun.slice(0, 4);
-            total = legs.reduce((acc, p) => acc * p.bookie_odd_num, 1);
+    // Helper to check combo validity
+    const checkFunValidity = (legs) => {
+        // Distinct fixtures?
+        const fids = new Set(legs.map(l => l.fixture_id));
+        if (fids.size !== legs.length) return false;
+
+        // "Avoid reuse of fixture_id already used in smart_combos" (Soft Rule)
+        // Let's count conflicts. If possible, 0 conflicts.
+        const conflicts = legs.filter(l => usedInSmartCombo.has(l.fixture_id)).length;
+
+        // "Require at least 1 VALUE/UPSIDE"
+        if (mustIncludePreferred) {
+            const hasPref = legs.some(l => l.tier === "VALUE" || l.tier === "HIGH_UPSIDE");
+            if (!hasPref) return false;
         }
 
-        if (total >= FUN_COMBO_MIN_TOTAL) {
-            funCombo = {
-                legs: legs,
-                total_odds: total,
-                units: STAKE_FUN
-            };
+        return { valid: true, conflicts };
+    };
+
+    // Try 3 legs first
+    if (allFunCandidates.length >= 3) {
+        // Simple combinations logic 3 loops
+        for(let i=0; i<allFunCandidates.length; i++) {
+            for(let j=i+1; j<allFunCandidates.length; j++) {
+                for(let k=j+1; k<allFunCandidates.length; k++) {
+                    const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k]];
+                    const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+
+                    if (total >= FUN_COMBO_MIN_TOTAL) {
+                        const check = checkFunValidity(legs);
+                        if (check && check.valid) {
+                            // Penalty for conflicts?
+                            const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0) - (check.conflicts * 50); // Heavy penalty
+                            if (score > bestFunScore) {
+                                bestFunScore = score;
+                                bestFun = { legs, total_odds: total, units: STAKE_FUN };
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+
+    // If 3 legs didn't yield result (or low score), try 4 legs?
+    // Spec: "3 legs preferred, 4 only if needed". "Objective: maximize sum".
+    // If we found a 3-leg, we usually stick to it unless 4-leg is strictly required to meet odds.
+    // If `bestFun` is null (no 3-leg met odds), try 4.
+    if (!bestFun && allFunCandidates.length >= 4) {
+         for(let i=0; i<allFunCandidates.length; i++) {
+            for(let j=i+1; j<allFunCandidates.length; j++) {
+                for(let k=j+1; k<allFunCandidates.length; k++) {
+                    for(let l=k+1; l<allFunCandidates.length; l++) {
+                        const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k], allFunCandidates[l]];
+                        const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+
+                        if (total >= FUN_COMBO_MIN_TOTAL) {
+                            const check = checkFunValidity(legs);
+                            if (check && check.valid) {
+                                const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0) - (check.conflicts * 50);
+                                if (score > bestFunScore) {
+                                    bestFunScore = score;
+                                    bestFun = { legs, total_odds: total, units: STAKE_FUN };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Final check: if no funnel found valid pair due to "Preferred" constraint, fallback to any?
+    // User said: "If none exist, allow CORE-only fallback."
+    // Logic: `mustIncludePreferred` handles existence. If none exist, flag is false, core-only allowed.
+    // If they existed but didn't fit odds/fixtures? Then `bestFun` remains null.
+
+    funCombo = bestFun;
 
     const packObj = {
         core_singles: corePicks.map(p => formatPick(p)),
@@ -465,13 +533,63 @@ for (const dayStr in days) {
     const dayResult = {
         date: dayStr,
         summary: summaryStr,
-        debug_stats: debugStats, // Include for analysis
+        // debug_stats: debugStats, // Removed from per-day object to avoid repetition
         packs: packObj,
         telegram_text_block: ""
     };
 
     dayResult.telegram_text_block = buildTelegramBlock(dayResult);
-    output.push(dayResult);
+
+    // --- FLATTENING for DB Storage ---
+
+    // 1. DAY_SUMMARY
+    flattenedItems.push({
+        type: "DAY_SUMMARY",
+        date: dayStr,
+        summary: summaryStr,
+        telegram_text: dayResult.telegram_text_block,
+        stats: debugStats, // Include stats once per day summary if needed, or globally
+        generated_at: new Date().toISOString()
+    });
+
+    // 2. PICKS (CORE, VALUE, UPSIDE)
+    const emitPick = (p, packType) => {
+        flattenedItems.push({
+            type: "PICK",
+            pack_type: packType, // CORE, VALUE, HIGH_UPSIDE
+            date: dayStr,
+            ...p
+        });
+    };
+
+    packObj.core_singles.forEach(p => emitPick(p, "CORE"));
+    packObj.value_picks.forEach(p => emitPick(p, "VALUE"));
+    packObj.upside_picks.forEach(p => emitPick(p, "HIGH_UPSIDE"));
+
+    // 3. COMBOS
+    const emitCombo = (c, type) => {
+        const comboId = `${type}_${dayStr}_${Math.random().toString(36).substr(2, 5)}`; // Simple ID
+        flattenedItems.push({
+            type: "COMBO_HEADER",
+            combo_type: type,
+            date: dayStr,
+            total_odds: c.total_odds,
+            units: c.units,
+            combo_id: comboId,
+            legs_count: c.legs.length
+        });
+        c.legs.forEach(l => {
+            flattenedItems.push({
+                type: "COMBO_LEG",
+                combo_id: comboId,
+                date: dayStr,
+                ...l
+            });
+        });
+    };
+
+    packObj.smart_combos.forEach(c => emitCombo(c, "SMART_COMBO"));
+    if (packObj.fun_combo) emitCombo(packObj.fun_combo, "FUN_COMBO");
 }
 
 function formatPick(p, minimal = false) {
@@ -492,4 +610,4 @@ function formatPick(p, minimal = false) {
     return base;
 }
 
-return output;
+return flattenedItems;
