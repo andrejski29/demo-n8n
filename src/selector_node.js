@@ -15,7 +15,7 @@ const OVERROUND_MAX = 1.12;
 const MARKET_1H_ODDS_MIN = 2.20;
 const MARKET_1H_EDGE_MIN = 30;
 const MARKET_1H_RATING_MIN = 48;
-const MARKET_1H_PROB_MIN = 0.30; // Added Prob Floor for 1X2_1H
+const MARKET_1H_PROB_MIN = 0.30;
 
 // Telegram Scoring
 const BONUS_ODDS_MIN = 1.80;
@@ -34,7 +34,7 @@ const CORE_ODDS_MIN = 1.50;
 const CORE_ODDS_MAX = 2.20;
 const CORE_EDGE_MIN = 15;
 const CORE_RATING_MIN = 48;
-const STAKE_CORE = 1.0; // Confirmed 1.0u
+const STAKE_CORE = 1.0;
 
 // Classification - VALUE (Silver)
 const VALUE_ODDS_MIN = 2.20;
@@ -54,12 +54,13 @@ const STAKE_UPSIDE = 0.25;
 const COMBO_ODDS_MIN = 2.10;
 const COMBO_ODDS_MAX = 3.00;
 const STAKE_COMBO = 0.5;
-const COMBO_USE_AFTER_TOP_CORE = 3; // Use core picks ranked 4+
+const COMBO_USE_AFTER_TOP_CORE = 3;
 
 // Fun Combo (Treble/4-fold)
-const FUN_COMBO_MIN_TOTAL = 8.00; // Default 8.0
-const FUN_COMBO_STRICT_TOTAL = 10.00; // Switchable
+const FUN_COMBO_MIN_TOTAL = 8.00;
+const FUN_COMBO_STRICT_TOTAL = 10.00;
 const FUN_COMBO_MAX_LEGS = 4;
+const FUN_COMBO_PREFERRED_LEGS = 3;
 const STAKE_FUN = 0.25;
 const FUN_MARKET_BLACKLIST = ["Exact_Goals_Match", "Exact_Goals_Home", "Exact_Goals_Away", "Exact_Goals_2H", "ht_ft", "Combo_Result_BTTS", "Combo_Result_Total", "Combo_TotalGoals_BTTS", "Winning_Margin"];
 
@@ -68,7 +69,7 @@ const FUN_MARKET_BLACKLIST = ["Exact_Goals_Match", "Exact_Goals_Home", "Exact_Go
 const parseNum = (val) => {
     if (typeof val === 'number') return val;
     if (!val) return null;
-    const str = String(val).replace(/[%]/g, '');
+    const str = String(val).replace(/[%]/g, '').replace(',', '.'); // Fix comma decimals
     const n = parseFloat(str);
     return Number.isFinite(n) ? n : null;
 };
@@ -82,6 +83,13 @@ const getFixtureDay = (isoDate) => {
     }
 };
 
+const generateComboId = (type, dayStr, legs) => {
+    const sortedIds = legs.map(l => l.fixture_id).sort().join('-');
+    // Simple hashing or raw string if length permits. Let's use raw string for clarity/determinism.
+    // Format: TYPE_YYYY-MM-DD_FIX1-FIX2
+    return `${type}_${dayStr}_${sortedIds}`;
+};
+
 const buildTelegramBlock = (dayObj) => {
     const lines = [];
     const dateStr = dayObj.date;
@@ -89,9 +97,6 @@ const buildTelegramBlock = (dayObj) => {
     lines.push("");
 
     // Core Singles
-    // We display "Top 3" specifically, then mention others?
-    // Spec: "Output core_singles as ALL core picks... Telegram block can show Top 3 + Others"
-    // Let's list top 3 full details, then just count.
     const topCore = dayObj.packs.core_singles.slice(0, 3);
     const extraCore = dayObj.packs.core_singles.slice(3);
 
@@ -233,7 +238,7 @@ const filteredBets = bets.filter(b => {
         if (b.bookie_odd_num < MARKET_1H_ODDS_MIN ||
             b.edge_percent_num < MARKET_1H_EDGE_MIN ||
             b.rating_score_num < MARKET_1H_RATING_MIN ||
-            b.fair_prob_num < MARKET_1H_PROB_MIN) { // Added Prob Floor
+            b.fair_prob_num < MARKET_1H_PROB_MIN) {
             return false;
         }
     }
@@ -303,7 +308,7 @@ const classified = uniqueBets.map(b => {
     }
     // 2. VALUE (Silver) - Higher Odds/Edge
     else if (
-        b.bookie_odd_num >= VALUE_ODDS_MIN && // Fixed > to >=
+        b.bookie_odd_num >= VALUE_ODDS_MIN &&
         b.fair_prob_num >= VALUE_PROB_MIN &&
         b.edge_percent_num >= VALUE_EDGE_MIN &&
         b.rating_score_num >= VALUE_RATING_MIN
@@ -351,24 +356,16 @@ for (const dayStr in days) {
     const valuePicks = dayPicks.filter(p => p.tier === "VALUE");
     const upsidePicks = dayPicks.filter(p => p.tier === "HIGH_UPSIDE");
 
-    // 1. Core Singles
-    // Use ALL core picks
-
-    // 2. Smart Combo (Double) - Allow up to 2
+    // 1. Smart Combo (Double) - Allow up to 2
     const smartCombos = [];
     const usedInSmartCombo = new Set();
 
-    // Candidates: Core picks ranked 4+ (index 3+)
-    // If fewer than COMBO_USE_AFTER_TOP_CORE, we might have no candidates for combo if strictly following rule
-    // "Build smart combos after top CORE singles (configurable)"
     const comboCandidates = corePicks.slice(COMBO_USE_AFTER_TOP_CORE).filter(p => p.fair_prob_num <= PROB_CAP_CORE);
 
     // Greedy search for pairs OPTIMIZED (max score sum)
     while (comboCandidates.length >= 2 && smartCombos.length < 2) {
         let bestPair = null;
         let bestScoreSum = -Infinity;
-        let p1Index = -1;
-        let p2Index = -1;
 
         for (let i = 0; i < comboCandidates.length; i++) {
             if (usedInSmartCombo.has(comboCandidates[i].fixture_id)) continue;
@@ -387,8 +384,6 @@ for (const dayStr in days) {
                     if (s > bestScoreSum) {
                         bestScoreSum = s;
                         bestPair = [p1, p2];
-                        p1Index = i;
-                        p2Index = j;
                     }
                 }
             }
@@ -402,100 +397,76 @@ for (const dayStr in days) {
             });
             usedInSmartCombo.add(bestPair[0].fixture_id);
             usedInSmartCombo.add(bestPair[1].fixture_id);
-            // Remove used from candidates to avoid re-checking?
-            // Or just rely on usedInSmartCombo set. Set is cleaner.
         } else {
-            break; // No valid pairs found
+            break;
         }
     }
 
     // 3. Fun Combo (Treble/4-fold)
     let funCombo = null;
-
-    // Pool: VALUE + HIGH_UPSIDE (Preferred) + CORE (Backfill)
     const isSafeForFun = (p) => !FUN_MARKET_BLACKLIST.includes(p.market);
-
     const preferredPool = [...valuePicks, ...upsidePicks].filter(isSafeForFun);
-    const backfillPool = corePicks.filter(isSafeForFun); // Can use any core? Yes.
-
-    // Requirement: "Require at least 1 VALUE or HIGH_UPSIDE leg if there is at least one available"
+    const backfillPool = corePicks.filter(isSafeForFun);
     const mustIncludePreferred = preferredPool.length > 0;
 
-    // Combine for search
-    // We want to maximize score sum given constraints.
-    // Full search might be expensive if many picks. Bounded search: Top N.
     const TOP_N_SEARCH = 12;
     const allFunCandidates = [...preferredPool, ...backfillPool]
         .sort((a,b) => b.telegram_score - a.telegram_score)
-        .slice(0, TOP_N_SEARCH); // Optimization
+        .slice(0, TOP_N_SEARCH);
 
-    // Bounded Search 3 or 4 legs
-    let bestFun = null;
-    let bestFunScore = -Infinity;
-
-    // Helper to check combo validity
-    const checkFunValidity = (legs) => {
-        // Distinct fixtures?
+    const checkFunValidity = (legs, strictConflict = true) => {
         const fids = new Set(legs.map(l => l.fixture_id));
         if (fids.size !== legs.length) return false;
 
-        // "Avoid reuse of fixture_id already used in smart_combos" (Soft Rule)
-        // Let's count conflicts. If possible, 0 conflicts.
         const conflicts = legs.filter(l => usedInSmartCombo.has(l.fixture_id)).length;
+        if (strictConflict && conflicts > 0) return false;
 
-        // "Require at least 1 VALUE/UPSIDE"
         if (mustIncludePreferred) {
             const hasPref = legs.some(l => l.tier === "VALUE" || l.tier === "HIGH_UPSIDE");
             if (!hasPref) return false;
         }
-
         return { valid: true, conflicts };
     };
 
-    // Try 3 legs first
-    if (allFunCandidates.length >= 3) {
-        // Simple combinations logic 3 loops
-        for(let i=0; i<allFunCandidates.length; i++) {
-            for(let j=i+1; j<allFunCandidates.length; j++) {
-                for(let k=j+1; k<allFunCandidates.length; k++) {
-                    const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k]];
-                    const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+    const findBestCombo = (legCount, strictConflict) => {
+        let best = null;
+        let maxScore = -Infinity;
 
-                    if (total >= FUN_COMBO_MIN_TOTAL) {
-                        const check = checkFunValidity(legs);
-                        if (check && check.valid) {
-                            // Penalty for conflicts?
-                            const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0) - (check.conflicts * 50); // Heavy penalty
-                            if (score > bestFunScore) {
-                                bestFunScore = score;
-                                bestFun = { legs, total_odds: total, units: STAKE_FUN };
+        // Recursive combination or nested loops? Nested loops fixed depth for 3 and 4 is easier/faster here.
+        if (legCount === 3) {
+            for(let i=0; i<allFunCandidates.length; i++) {
+                for(let j=i+1; j<allFunCandidates.length; j++) {
+                    for(let k=j+1; k<allFunCandidates.length; k++) {
+                        const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k]];
+                        const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+                        if (total >= FUN_COMBO_MIN_TOTAL) {
+                            const check = checkFunValidity(legs, strictConflict);
+                            if (check && check.valid) {
+                                const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0); // No penalty if strict, or handled outside
+                                if (score > maxScore) {
+                                    maxScore = score;
+                                    best = { legs, total_odds: total, units: STAKE_FUN };
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-    }
-
-    // If 3 legs didn't yield result (or low score), try 4 legs?
-    // Spec: "3 legs preferred, 4 only if needed". "Objective: maximize sum".
-    // If we found a 3-leg, we usually stick to it unless 4-leg is strictly required to meet odds.
-    // If `bestFun` is null (no 3-leg met odds), try 4.
-    if (!bestFun && allFunCandidates.length >= 4) {
-         for(let i=0; i<allFunCandidates.length; i++) {
-            for(let j=i+1; j<allFunCandidates.length; j++) {
-                for(let k=j+1; k<allFunCandidates.length; k++) {
-                    for(let l=k+1; l<allFunCandidates.length; l++) {
-                        const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k], allFunCandidates[l]];
-                        const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
-
-                        if (total >= FUN_COMBO_MIN_TOTAL) {
-                            const check = checkFunValidity(legs);
-                            if (check && check.valid) {
-                                const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0) - (check.conflicts * 50);
-                                if (score > bestFunScore) {
-                                    bestFunScore = score;
-                                    bestFun = { legs, total_odds: total, units: STAKE_FUN };
+        } else if (legCount === 4) {
+             for(let i=0; i<allFunCandidates.length; i++) {
+                for(let j=i+1; j<allFunCandidates.length; j++) {
+                    for(let k=j+1; k<allFunCandidates.length; k++) {
+                        for(let l=k+1; l<allFunCandidates.length; l++) {
+                            const legs = [allFunCandidates[i], allFunCandidates[j], allFunCandidates[k], allFunCandidates[l]];
+                            const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+                            if (total >= FUN_COMBO_MIN_TOTAL) {
+                                const check = checkFunValidity(legs, strictConflict);
+                                if (check && check.valid) {
+                                    const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0);
+                                    if (score > maxScore) {
+                                        maxScore = score;
+                                        best = { legs, total_odds: total, units: STAKE_FUN };
+                                    }
                                 }
                             }
                         }
@@ -503,14 +474,29 @@ for (const dayStr in days) {
                 }
             }
         }
+        return best;
+    };
+
+    // 2-Pass Search
+    // Pass A: 3 legs, Strict Conflict Check
+    if (allFunCandidates.length >= 3) {
+        funCombo = findBestCombo(3, true);
     }
 
-    // Final check: if no funnel found valid pair due to "Preferred" constraint, fallback to any?
-    // User said: "If none exist, allow CORE-only fallback."
-    // Logic: `mustIncludePreferred` handles existence. If none exist, flag is false, core-only allowed.
-    // If they existed but didn't fit odds/fixtures? Then `bestFun` remains null.
+    // Pass B: 3 legs, Allow Conflicts (fallback)
+    if (!funCombo && allFunCandidates.length >= 3) {
+        funCombo = findBestCombo(3, false);
+    }
 
-    funCombo = bestFun;
+    // Pass C: 4 legs, Strict Conflict Check (Only if 3 failed to meet odds or non-existent)
+    if (!funCombo && allFunCandidates.length >= 4) {
+        funCombo = findBestCombo(4, true);
+    }
+
+    // Pass D: 4 legs, Allow Conflicts
+    if (!funCombo && allFunCandidates.length >= 4) {
+        funCombo = findBestCombo(4, false);
+    }
 
     const packObj = {
         core_singles: corePicks.map(p => formatPick(p)),
@@ -533,7 +519,6 @@ for (const dayStr in days) {
     const dayResult = {
         date: dayStr,
         summary: summaryStr,
-        // debug_stats: debugStats, // Removed from per-day object to avoid repetition
         packs: packObj,
         telegram_text_block: ""
     };
@@ -548,15 +533,15 @@ for (const dayStr in days) {
         date: dayStr,
         summary: summaryStr,
         telegram_text: dayResult.telegram_text_block,
-        stats: debugStats, // Include stats once per day summary if needed, or globally
+        stats: debugStats,
         generated_at: new Date().toISOString()
     });
 
-    // 2. PICKS (CORE, VALUE, UPSIDE)
+    // 2. PICKS
     const emitPick = (p, packType) => {
         flattenedItems.push({
             type: "PICK",
-            pack_type: packType, // CORE, VALUE, HIGH_UPSIDE
+            pack_type: packType,
             date: dayStr,
             ...p
         });
@@ -568,7 +553,7 @@ for (const dayStr in days) {
 
     // 3. COMBOS
     const emitCombo = (c, type) => {
-        const comboId = `${type}_${dayStr}_${Math.random().toString(36).substr(2, 5)}`; // Simple ID
+        const comboId = generateComboId(type, dayStr, c.legs);
         flattenedItems.push({
             type: "COMBO_HEADER",
             combo_type: type,
@@ -592,6 +577,13 @@ for (const dayStr in days) {
     if (packObj.fun_combo) emitCombo(packObj.fun_combo, "FUN_COMBO");
 }
 
+// 4. RUN_STATS
+flattenedItems.push({
+    type: "RUN_STATS",
+    ...debugStats,
+    generated_at: new Date().toISOString()
+});
+
 function formatPick(p, minimal = false) {
     const base = {
         fixture_id: p.fixture_id,
@@ -601,6 +593,7 @@ function formatPick(p, minimal = false) {
         odds: p.bookie_odd_num,
         edge: p.edge_percent_num,
         rating: p.rating_score_num,
+        tier: p.tier // Added for analytics
     };
     if (!minimal) {
         base.p = p.fair_prob_num;
