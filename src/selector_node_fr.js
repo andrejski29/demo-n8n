@@ -41,6 +41,7 @@ const STAKE_CORE = 1.0;
 
 // Classification - VALUE (Silver)
 const VALUE_ODDS_MIN = 2.20;
+const VALUE_ODDS_MAX = 3.20; // Option 2: Cap
 const VALUE_PROB_MIN = 0.35;
 const VALUE_EDGE_MIN = 30;
 const VALUE_RATING_MIN = 48;
@@ -330,26 +331,54 @@ const classified = uniqueBets.map(b => {
         units = STAKE_UPSIDE;
     }
     // 2. VALUE (Silver) - Higher Odds/Edge
-    else if (
-        b.bookie_odd_num >= VALUE_ODDS_MIN &&
-        b.fair_prob_num >= VALUE_PROB_MIN &&
-        b.edge_percent_num >= VALUE_EDGE_MIN &&
-        b.rating_score_num >= VALUE_RATING_MIN
-    ) {
-        tier = "VALUE";
-        units = STAKE_VALUE;
-    }
-    // 3. CORE (Gold) - Stable
-    else if (
-        b.fair_prob_num >= CORE_PROB_MIN &&
-        b.fair_prob_num <= CORE_PROB_MAX &&
-        b.bookie_odd_num >= CORE_ODDS_MIN &&
-        b.bookie_odd_num <= CORE_ODDS_MAX &&
-        b.edge_percent_num >= CORE_EDGE_MIN &&
-        b.rating_score_num >= CORE_RATING_MIN
-    ) {
-        tier = "CORE";
-        units = STAKE_CORE;
+    else {
+        let isValueCandidate = (
+            b.bookie_odd_num >= VALUE_ODDS_MIN &&
+            b.bookie_odd_num <= VALUE_ODDS_MAX &&
+            b.fair_prob_num >= VALUE_PROB_MIN &&
+            b.edge_percent_num >= VALUE_EDGE_MIN &&
+            b.rating_score_num >= VALUE_RATING_MIN
+        );
+
+        if (isValueCandidate) {
+            // Option 3: Market Specific Rules
+
+            // Rule 1: DoubleChance high odds
+            if (b.market === "DoubleChance" && b.bookie_odd_num >= 2.40) {
+                // require p >= 0.58 or rating >= 70
+                if (b.fair_prob_num < 0.58 && b.rating_score_num < 70) {
+                    isValueCandidate = false;
+                }
+            }
+
+            // Rule 2: 1X2 Away Win (Selection "2")
+            // Use 'outcome' as that is the standard field name from input
+            const sel = b.outcome || b.selection;
+            if (b.market === "1X2" && sel === "2") {
+                // require p >= 0.50 and (edge >= 35 OR rating >= 60)
+                const strongEdgeOrRating = (b.edge_percent_num >= 35 || b.rating_score_num >= 60);
+                if (b.fair_prob_num < 0.50 || !strongEdgeOrRating) {
+                    isValueCandidate = false;
+                }
+            }
+        }
+
+        if (isValueCandidate) {
+            tier = "VALUE";
+            units = STAKE_VALUE;
+        }
+        // 3. CORE (Gold) - Stable
+        else if (
+            b.fair_prob_num >= CORE_PROB_MIN &&
+            b.fair_prob_num <= CORE_PROB_MAX &&
+            b.bookie_odd_num >= CORE_ODDS_MIN &&
+            b.bookie_odd_num <= CORE_ODDS_MAX &&
+            b.edge_percent_num >= CORE_EDGE_MIN &&
+            b.rating_score_num >= CORE_RATING_MIN
+        ) {
+            tier = "CORE";
+            units = STAKE_CORE;
+        }
     }
 
     return { ...b, tier, units };
