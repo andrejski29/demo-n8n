@@ -678,6 +678,16 @@ flattenedItems.push({
     generated_at: new Date().toISOString()
 });
 
+// Post-Processing: Sanitize Units from Output
+const deepRemoveKey = (obj, key) => {
+  if (!obj || typeof obj !== "object") return;
+  if (Array.isArray(obj)) return obj.forEach(x => deepRemoveKey(x, key));
+  if (key in obj) delete obj[key];
+  Object.values(obj).forEach(v => deepRemoveKey(v, key));
+};
+
+deepRemoveKey(flattenedItems, "units");
+
 function formatPick(p, minimal = false) {
     const base = {
         fixture_id: p.fixture_id,
