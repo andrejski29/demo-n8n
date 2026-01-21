@@ -56,6 +56,11 @@ const COMBO_ODDS_MAX = 3.00;
 const STAKE_COMBO = 0.5;
 const COMBO_USE_AFTER_TOP_CORE = 3;
 
+// Mid Combo (2-3 legs)
+const MID_COMBO_ODDS_MIN = 3.00;
+const MID_COMBO_ODDS_MAX = 5.00;
+const STAKE_MID = 0.33;
+
 // Fun Combo (Treble/4-fold)
 const FUN_COMBO_MIN_TOTAL = 8.00;
 const FUN_COMBO_STRICT_TOTAL = 10.00;
@@ -85,8 +90,6 @@ const getFixtureDay = (isoDate) => {
 
 const generateComboId = (type, dayStr, legs) => {
     const sortedIds = legs.map(l => l.fixture_id).sort().join('-');
-    // Simple hashing or raw string if length permits. Let's use raw string for clarity/determinism.
-    // Format: TYPE_YYYY-MM-DD_FIX1-FIX2
     return `${type}_${dayStr}_${sortedIds}`;
 };
 
@@ -126,6 +129,18 @@ const buildTelegramBlock = (dayObj) => {
             lines.push(`  🎯 Stake: ${c.units}u`);
             lines.push("");
         });
+    }
+
+    // Mid Combo
+    if (dayObj.packs.mid_combo) {
+        lines.push(`⚡ *MID COMBO (2-3 legs)*`);
+        const c = dayObj.packs.mid_combo;
+        c.legs.forEach(l => {
+            lines.push(`• ${l.match}: ${l.market} - ${l.selection} @ ${l.odds.toFixed(2)}`);
+        });
+        lines.push(`  🚀 *Total Odds: ${c.total_odds.toFixed(2)}*`);
+        lines.push(`  🎯 Stake: ${c.units}u`);
+        lines.push("");
     }
 
     // Value Picks
@@ -360,6 +375,7 @@ for (const dayStr in days) {
     const smartCombos = [];
     const usedInSmartCombo = new Set();
 
+    // Candidates: Core picks ranked 4+ (index 3+)
     const comboCandidates = corePicks.slice(COMBO_USE_AFTER_TOP_CORE).filter(p => p.fair_prob_num <= PROB_CAP_CORE);
 
     // Greedy search for pairs OPTIMIZED (max score sum)
@@ -402,6 +418,75 @@ for (const dayStr in days) {
         }
     }
 
+    // 2. MID COMBO (2-3 legs, 3.0-5.0 odds)
+    let midCombo = null;
+    // Pool: CORE (rank 4+) + VALUE (preferred?)
+    // Let's mix them. Candidates not already used in smart combos.
+
+    const midCandidates = [...corePicks.slice(COMBO_USE_AFTER_TOP_CORE), ...valuePicks]
+        .filter(p => !usedInSmartCombo.has(p.fixture_id))
+        .sort((a,b) => b.telegram_score - a.telegram_score);
+
+    // Helper search
+    const findMidCombo = (legCount, strictConflict) => {
+        let best = null;
+        let maxScore = -Infinity;
+
+        if (midCandidates.length < legCount) return null;
+
+        // 2 legs
+        if (legCount === 2) {
+             for(let i=0; i<midCandidates.length; i++) {
+                for(let j=i+1; j<midCandidates.length; j++) {
+                    const p1 = midCandidates[i];
+                    const p2 = midCandidates[j];
+                    if (p1.fixture_id === p2.fixture_id) continue;
+
+                    const total = p1.bookie_odd_num * p2.bookie_odd_num;
+                    if (total >= MID_COMBO_ODDS_MIN && total <= MID_COMBO_ODDS_MAX) {
+                         const score = p1.telegram_score + p2.telegram_score;
+                         if (score > maxScore) {
+                             maxScore = score;
+                             best = { legs: [p1, p2], total_odds: total, units: STAKE_MID };
+                         }
+                    }
+                }
+             }
+        } else if (legCount === 3) {
+             for(let i=0; i<midCandidates.length; i++) {
+                for(let j=i+1; j<midCandidates.length; j++) {
+                    for(let k=j+1; k<midCandidates.length; k++) {
+                        const legs = [midCandidates[i], midCandidates[j], midCandidates[k]];
+                         // Distinct fixtures
+                        const fids = new Set(legs.map(l => l.fixture_id));
+                        if (fids.size !== 3) continue;
+
+                        const total = legs.reduce((acc,p)=>acc*p.bookie_odd_num, 1);
+                        if (total >= MID_COMBO_ODDS_MIN && total <= MID_COMBO_ODDS_MAX) {
+                            const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0);
+                            if (score > maxScore) {
+                                maxScore = score;
+                                best = { legs, total_odds: total, units: STAKE_MID };
+                            }
+                        }
+                    }
+                }
+             }
+        }
+        return best;
+    }
+
+    // Pass 1: Try 2 legs
+    midCombo = findMidCombo(2);
+    // Pass 2: Try 3 legs (fallback)
+    if (!midCombo) midCombo = findMidCombo(3);
+
+    // Track used in mid combo to avoid in fun combo?
+    const usedInMidCombo = new Set();
+    if (midCombo) {
+        midCombo.legs.forEach(l => usedInMidCombo.add(l.fixture_id));
+    }
+
     // 3. Fun Combo (Treble/4-fold)
     let funCombo = null;
     const isSafeForFun = (p) => !FUN_MARKET_BLACKLIST.includes(p.market);
@@ -418,7 +503,14 @@ for (const dayStr in days) {
         const fids = new Set(legs.map(l => l.fixture_id));
         if (fids.size !== legs.length) return false;
 
-        const conflicts = legs.filter(l => usedInSmartCombo.has(l.fixture_id)).length;
+        // Conflict with Smart OR Mid?
+        // User said: "Avoid reuse of fixtures used in Smart Combos". Didn't mention Mid explicitly but safer to avoid.
+        // Let's combine conflicts
+        let conflicts = 0;
+        legs.forEach(l => {
+            if (usedInSmartCombo.has(l.fixture_id) || usedInMidCombo.has(l.fixture_id)) conflicts++;
+        });
+
         if (strictConflict && conflicts > 0) return false;
 
         if (mustIncludePreferred) {
@@ -432,7 +524,6 @@ for (const dayStr in days) {
         let best = null;
         let maxScore = -Infinity;
 
-        // Recursive combination or nested loops? Nested loops fixed depth for 3 and 4 is easier/faster here.
         if (legCount === 3) {
             for(let i=0; i<allFunCandidates.length; i++) {
                 for(let j=i+1; j<allFunCandidates.length; j++) {
@@ -442,7 +533,7 @@ for (const dayStr in days) {
                         if (total >= FUN_COMBO_MIN_TOTAL) {
                             const check = checkFunValidity(legs, strictConflict);
                             if (check && check.valid) {
-                                const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0); // No penalty if strict, or handled outside
+                                const score = legs.reduce((acc,p)=>acc+p.telegram_score, 0);
                                 if (score > maxScore) {
                                     maxScore = score;
                                     best = { legs, total_odds: total, units: STAKE_FUN };
@@ -505,6 +596,11 @@ for (const dayStr in days) {
             total_odds: c.total_odds,
             units: c.units
         })),
+        mid_combo: midCombo ? {
+             legs: midCombo.legs.map(l => formatPick(l, true)),
+             total_odds: midCombo.total_odds,
+             units: midCombo.units
+        } : null,
         value_picks: valuePicks.map(p => formatPick(p)),
         upside_picks: upsidePicks.map(p => formatPick(p)),
         fun_combo: funCombo ? {
@@ -514,7 +610,7 @@ for (const dayStr in days) {
         } : null
     };
 
-    const summaryStr = `${packObj.core_singles.length} Core + ${packObj.smart_combos.length} Smart Dbl + ${packObj.value_picks.length} Value + ${packObj.upside_picks.length} Upside + ${packObj.fun_combo ? "1 Fun" : "0 Fun"}`;
+    const summaryStr = `${packObj.core_singles.length} Core + ${packObj.smart_combos.length} Smart Dbl + ${packObj.mid_combo ? "1 Mid" : "0 Mid"} + ${packObj.value_picks.length} Value + ${packObj.upside_picks.length} Upside + ${packObj.fun_combo ? "1 Fun" : "0 Fun"}`;
 
     const dayResult = {
         date: dayStr,
@@ -574,6 +670,7 @@ for (const dayStr in days) {
     };
 
     packObj.smart_combos.forEach(c => emitCombo(c, "SMART_COMBO"));
+    if (packObj.mid_combo) emitCombo(packObj.mid_combo, "MID_COMBO");
     if (packObj.fun_combo) emitCombo(packObj.fun_combo, "FUN_COMBO");
 }
 
