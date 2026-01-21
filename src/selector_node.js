@@ -109,11 +109,13 @@ const buildTelegramBlock = (dayObj) => {
             lines.push(`• *${p.match}*`);
             lines.push(`  ${p.market} - ${p.selection} @ *${p.odds.toFixed(2)}*`);
             lines.push(`  Edge: ${p.edge}% | Rating: ${p.rating}`);
-            lines.push(`  🎯 Stake: ${p.units}u`);
+            // No stake display per request
             lines.push("");
         });
         if (extraCore.length > 0) {
-            lines.push(`_...plus ${extraCore.length} more Core picks available._`);
+            extraCore.forEach(p => {
+                lines.push(`• ${p.match}: ${p.market} - ${p.selection} @ ${p.odds.toFixed(2)}`);
+            });
             lines.push("");
         }
     }
@@ -126,7 +128,6 @@ const buildTelegramBlock = (dayObj) => {
                 lines.push(`• ${l.match}: ${l.market} - ${l.selection} @ ${l.odds.toFixed(2)}`);
             });
             lines.push(`  🚀 *Total Odds: ${c.total_odds.toFixed(2)}*`);
-            lines.push(`  🎯 Stake: ${c.units}u`);
             lines.push("");
         });
     }
@@ -139,7 +140,6 @@ const buildTelegramBlock = (dayObj) => {
             lines.push(`• ${l.match}: ${l.market} - ${l.selection} @ ${l.odds.toFixed(2)}`);
         });
         lines.push(`  🚀 *Total Odds: ${c.total_odds.toFixed(2)}*`);
-        lines.push(`  🎯 Stake: ${c.units}u`);
         lines.push("");
     }
 
@@ -151,7 +151,6 @@ const buildTelegramBlock = (dayObj) => {
             lines.push(`• *${v.match}*`);
             lines.push(`  ${v.market} - ${v.selection} @ *${v.odds.toFixed(2)}*`);
             lines.push(`  Edge: ${v.edge}% | Prob: ${(v.p * 100).toFixed(1)}%`);
-            lines.push(`  🎯 Stake: ${v.units}u`);
             lines.push("");
         });
     }
@@ -162,7 +161,6 @@ const buildTelegramBlock = (dayObj) => {
         const topUpside = dayObj.packs.upside_picks.slice(0, 2);
         topUpside.forEach(u => {
             lines.push(`• ${u.match}: ${u.market} - ${u.selection} @ *${u.odds.toFixed(2)}*`);
-            lines.push(`  🎯 Stake: ${u.units}u`);
         });
         lines.push("");
     }
@@ -175,7 +173,6 @@ const buildTelegramBlock = (dayObj) => {
             lines.push(`• ${l.match}: ${l.market} - ${l.selection} @ ${l.odds.toFixed(2)}`);
         });
         lines.push(`  🌌 *Total Odds: ${c.total_odds.toFixed(2)}*`);
-        lines.push(`  🎯 Stake: ${c.units}u`);
         lines.push("");
     }
 
