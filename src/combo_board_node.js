@@ -103,10 +103,10 @@ const buildBoardTelegramBlock = (combos) => {
     if (combos.safe && combos.safe.length > 0) {
         combos.safe.forEach((c, idx) => {
             const total = c.total_odds || 0;
-            lines.push(`✅ *Safe Combo #${idx + 1}* — Total ${total.toFixed(2)}`);
+            lines.push(`✅ *Safe Combo #${idx + 1}* — Total ${Number(total).toFixed(2)}`);
             c.legs.forEach(l => {
-                const odd = l.bookie_odd_num || 0;
-                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${odd.toFixed(2)}`);
+                const odd = l.odds || 0;
+                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${Number(odd).toFixed(2)}`);
             });
             lines.push("");
         });
@@ -116,10 +116,10 @@ const buildBoardTelegramBlock = (combos) => {
     if (combos.balanced && combos.balanced.length > 0) {
         combos.balanced.forEach((c, idx) => {
             const total = c.total_odds || 0;
-            lines.push(`⚖️ *Balanced Combo #${idx + 1}* — Total ${total.toFixed(2)}`);
+            lines.push(`⚖️ *Balanced Combo #${idx + 1}* — Total ${Number(total).toFixed(2)}`);
             c.legs.forEach(l => {
-                const odd = l.bookie_odd_num || 0;
-                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${odd.toFixed(2)}`);
+                const odd = l.odds || 0;
+                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${Number(odd).toFixed(2)}`);
             });
             lines.push("");
         });
@@ -129,10 +129,10 @@ const buildBoardTelegramBlock = (combos) => {
     if (combos.booster && combos.booster.length > 0) {
         combos.booster.forEach((c) => {
             const total = c.total_odds || 0;
-            lines.push(`🎢 *Booster Combo* — Total ${total.toFixed(2)}`);
+            lines.push(`🎢 *Booster Combo* — Total ${Number(total).toFixed(2)}`);
             c.legs.forEach(l => {
-                const odd = l.bookie_odd_num || 0;
-                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${odd.toFixed(2)}`);
+                const odd = l.odds || 0;
+                lines.push(`  • ${l.match}: ${l.market} - ${l.selection} @ ${Number(odd).toFixed(2)}`);
             });
             lines.push("");
         });
@@ -431,9 +431,9 @@ if (booster) boosterCombos.push(booster);
 const outputItems = [];
 
 const combos = {
-    safe: safeCombos,
-    balanced: balancedCombos,
-    booster: boosterCombos
+    safe: safeCombos.map(c => ({ ...c, legs: c.legs.map(l => formatPick(l, true)) })),
+    balanced: balancedCombos.map(c => ({ ...c, legs: c.legs.map(l => formatPick(l, true)) })),
+    booster: boosterCombos.map(c => ({ ...c, legs: c.legs.map(l => formatPick(l, true)) }))
 };
 
 const telegramText = buildBoardTelegramBlock(combos);
@@ -486,11 +486,19 @@ const deepRemoveKey = (obj, key) => {
 deepRemoveKey(outputItems, "units");
 
 function formatPick(p, minimal = false) {
+    let sel = p.outcome || p.selection;
+    // Map 1X2 selections for display
+    if (["1X2", "Corners_1X2", "Shots_1X2", "Cards_1X2"].includes(p.market)) {
+        if (sel === "1") sel = "Home";
+        else if (sel === "X") sel = "Draw";
+        else if (sel === "2") sel = "Away";
+    }
+
     const base = {
         fixture_id: p.fixture_id,
         match: `${p.home} vs ${p.away}`,
         market: p.market,
-        selection: p.outcome,
+        selection: sel,
         odds: p.bookie_odd_num,
         edge: p.edge_percent_num,
         rating: p.rating_score_num,
