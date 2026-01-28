@@ -1,0 +1,822 @@
+id
+ID of the Team.
+name / full_name / english_name
+Name of the Team.
+country
+Country of the Team.
+stats
+Contains an array of Stats for the corresponding team.
+competition_id
+ID of the Competition in which the team is playing.
+url
+Corresponding FootyStats url.
+founded
+Foundation year of the team.
+season
+Latest season participating in.
+table_position
+Position in the league.
+performance_rank
+PPG rating within the league.
+season_format
+Format of the season.
+official_sites
+Official website url of the team.
+risk
+Prediction risk, it represents how often a team scores or concedes goals within close proximity of each other.
+suspended_matches
+Number of matches suspended.
+homeOverallAdvantage / homeDefenceAdvantage / homeAttackAdvantage
+Advantage this team has in attack.
+Overall = all games, home = home games only, away = away games only.
+seasonGoals_overall
+Number of goals scored this season.
+seasonConceded_overall
+Number of goals conceded this season.
+seasonGoalsTotal_overall / home / away
+Number of goal event recorded when playing Home or Away.
+Overall = all games, home = home games only, away = away games only.
+seasonConcededNum_home / seasonConcededNum_away
+Number of goals conceded this season.
+Home = home games only, away = away games only.
+seasonGoalsMin_overall / home / away
+Average goals per minutes.
+Overall = all games, home = home games only, away = away games only.
+seasonConcededMin_overall / home / away
+Average goals conceded per minutes.
+Overall = all games, home = home games only, away = away games only.
+seasonGoalDifference_overall / home / away
+Goal difference.
+Overall = all games, home = home games only, away = away games only.
+seasonWinsNum_overall / home / away
+Number of wins in the season.
+Overall = all games, home = home games only, away = away games only.
+seasonDrawsNum_overall / home / away
+Number of draws in the season.
+Overall = all games, home = home games only, away = away games only.
+seasonLossesNum_overall / home / away
+Number of losses in the season.
+Overall = all games, home = home games only, away = away games only.
+seasonMatchesPlayed_overall / home / away
+Number of match played in the season.
+Overall = all games, home = home games only, away = away games only.
+seasonHighestScored_home / seasonHighestScored_away
+Highest number of goals scored.
+Home = home games only, away = away games only.
+seasonHighestConceded_home / seasonHighestConceded_away
+Highest number of goals conceded.
+Home = home games only, away = away games only.
+seasonCS_overall / home / away
+Season's clean sheets.
+Overall = all games, home = home games only, away = away games only.
+seasonCSPercentage_overall / home / away
+Season's clean sheets percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonCSHT_overall / home / away
+Season's clean sheets at half-time.
+Overall = all games, home = home games only, away = away games only.
+seasonCSPercentageHT_overall / home / away
+Season's clean sheets percentage at half-time.
+Overall = all games, home = home games only, away = away games only.
+seasonFTS_overall / home / away
+Season's Failed To Score.
+Overall = all games, home = home games only, away = away games only.
+seasonFTSPercentage_overall / home / away
+Season's Failed To Score percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonFTS_home / seasonFTS_away
+Season's Failed to score.
+Home = home games only, away = away games only.
+seasonFTSHT_overall / home / away
+Season's Failed to score at half-time.
+Overall = all games, home = home games only, away = away games only.
+seasonFTSPercentageHT_overall / home / away
+Season's Failed to score at half-time percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonBTTS_overall / home / away
+Season's both teams to score.
+Overall = all games, home = home games only, away = away games only.
+seasonBTTSPercentage_overall / home / away
+Season's both teams to score percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonBTTSHT_overall / home / away
+Season's both teams to score at half-time.
+Overall = all games, home = home games only, away = away games only.
+seasonBTTSPercentageHT_overall / home / away
+Season's both teams to score at half-time percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonPPG_overall / home / away
+Season's points per game, Win = 3 points, Draw = 1 point.
+Overall = all games, home = home games only, away = away games only.
+seasonAVG_overall / home / away
+Season's average goals scored + conceded per game.
+Overall = all games, home = home games only, away = away games only.
+seasonAVG_overall / home / away
+Season's average goals scored per game.
+Overall = all games, home = home games only, away = away games only.
+seasonConcededAVG_overall / home / away
+Season's average goals conceded per game.
+Overall = all games, home = home games only, away = away games only.
+winPercentage_overall / home / away
+Season's average win percentage.
+Overall = all games, home = home games only, away = away games only.
+drawPercentage_overall / home / away
+Season's average draw percentage.
+Overall = all games, home = home games only, away = away games only.
+losePercentage_overall / home / away
+Season's average loss percentage.
+Overall = all games, home = home games only, away = away games only.
+leadingAtHT_overall / home / away
+Season's leading at half-time count.
+Overall = all games, home = home games only, away = away games only.
+leadingAtHTPercentage_overall / home / away
+Season's leading at half-time percentage.
+Overall = all games, home = home games only, away = away games only.
+drawingAtHT_overall / home / away
+Season's drawing at half-time.
+Overall = all games, home = home games only, away = away games only.
+drawingAtHTPercentage_overall / home / away
+Season's drawing at half-time percentage.
+Overall = all games, home = home games only, away = away games only.
+trailingAtHT_overall / home / away
+Season's losing at half-time.
+Overall = all games, home = home games only, away = away games only.
+trailingAtHTPercentage_overall / home / away
+Season's losing at half-time percentage.
+Overall = all games, home = home games only, away = away games only.
+HTPoints_overall / home / away
+Season's half-time points.
+Overall = all games, home = home games only, away = away games only.
+HTPPG_overall / home / away
+Season's half-time points per game.
+Overall = all games, home = home games only, away = away games only.
+scoredAVGHT_overall / home / away
+Season's average scored at half-time.
+Overall = all games, home = home games only, away = away games only.
+concededAVGHT_overall / home / away
+Season's average conceded at half-time.
+Overall = all games, home = home games only, away = away games only.
+AVGHT_overall / home / away
+Season's average scored + conceded at half-time.
+Overall = all games, home = home games only, away = away games only.
+GoalsHT_overall / home / away
+Season's average goals at half-time.
+Overall = all games, home = home games only, away = away games only.
+GoalDifferenceHT_overall / home / away
+Season's average goal difference at half-time.
+Overall = all games, home = home games only, away = away games only.
+seasonOver05Num_overall - seasonOver55Num_overall / home / away
+Season's count of Over (0.5 - 5.5) goals.
+Overall = all games, home = home games only, away = away games only.
+seasonOver05Percentage_overall - seasonOver55Percentage_overall / home / away
+Season's percentage of Over (0.5 - 5.5) goals.
+Overall = all games, home = home games only, away = away games only.
+seasonUnder05Num_overall - seasonUnder55Num_overall / home / away
+Season's count of Under (0.5 - 5.5) goals.
+Overall = all games, home = home games only, away = away games only.
+seasonUnder05Percentage_overall - seasonUnder55Percentage_overall / home / away
+Season's percentage of Under (0.5 - 5.5) goals.
+Overall = all games, home = home games only, away = away games only.
+seasonOver05NumHT_overall - seasonOver25NumHT_overall / home / away
+Season's count of Over (0.5 - 5.5) goals at half time.
+Overall = all games, home = home games only, away = away games only.
+seasonOver05PercentageHT_overall - seasonOver25PercentageHT_overall / home / away
+Season's percentage of Over (0.5 - 5.5) goals at half time.
+Overall = all games, home = home games only, away = away games only.
+cornersRecorded_matches_overall / home / away
+Season's corners recorded per matches.
+Overall = all games, home = home games only, away = away games only.
+over65Corners_overall - over135Corners_overall / home / away
+Season's count of Over (6.5 - 13.5) corners.
+Overall = all games, home = home games only, away = away games only.
+over65CornersPercentage_overall - over135CornersPercentage_overall / home / away
+Season's percentage of Over (6.5 - 13.5) corners.
+Overall = all games, home = home games only, away = away games only.
+over25CornersFor_overall - over85CornersFor_overall / home / away
+Season's count of Over (2.5 - 8.5) corners for.
+Overall = all games, home = home games only, away = away games only.
+over25CornersForPercentage_overall - over65CornersForPercentage_overall / home / away
+Season's percentage of Over (2.5 - 8.5) corners for.
+Overall = all games, home = home games only, away = away games only.
+over25CornersAgainst_overall - over85CornersAgainst_overall / home / away
+Season's count of Over (2.5 - 8.5) corners against.
+Overall = all games, home = home games only, away = away games only.
+over25CornersAgainstPercentage_overall - over65CornersAgainstPercentage_overall / home / away
+Season's percentage of Over (2.5 - 8.5) corners against.
+Overall = all games, home = home games only, away = away games only.
+over05Cards_overall - over85Cards_overall / ohome / away
+Season's count of Over (0,5 - 8.5) cards.
+Overall = all games, home = home games only, away = away games only.
+over05CardsPercentage_overall - over85CardsPercentage_overall / home / away
+Season's percentage of Over (0,5 - 8.5) cards.
+Overall = all games, home = home games only, away = away games only.
+over05CardsFor_overall - over85CardsFor_overall / home / away
+Season's count of Over (0,5 - 8.5) cards for.
+Overall = all games, home = home games only, away = away games only.
+over05CardsForPercentage_overall - over85CardsForPercentage_overall / home / away
+Season's percentage of Over (0,5 - 8.5) cards for.
+Overall = all games, home = home games only, away = away games only.
+over05CardsAgainst_overall - over85CardsAgainst_overall / home / away
+Season's count of Over (0,5 - 8.5) cards for.
+Overall = all games, home = home games only, away = away games only.
+over05CardsAgainstPercentage_overall - over85CardsAgainstPercentage_overall / home / away
+Season's percentage of Over (0,5 - 8.5) cards for.
+Overall = all games, home = home games only, away = away games only.
+leaguePosition_overall / home / away
+Season's league position.
+Overall = normal league table, home = home table only, away = away table only.
+firstGoalScored_overall / home / away
+Season's count of first goals scored.
+Overall = all games, home = home games only, away = away games only.
+firstGoalScoredPercentage_overall / home / away
+Season's percentage of first goals scored.
+Overall = all games, home = home games only, away = away games only.
+cornersTotal_overall / home / away
+Season's count of corners.
+Overall = all games, home = home games only, away = away games only.
+cornersTotalAVG_overall / home / away
+Season's average count of corners per match.
+Overall = all games, home = home games only, away = away games only.
+cornersAVG_overall / home / away
+Season's average count of corners.
+Overall = all games, home = home games only, away = away games only.
+cardsTotal_overall / home / away
+Season's count of cards.
+Overall = all games, home = home games only, away = away games only.
+cardsAVG_overall / home / away
+Season's count of cards.
+Overall = all games, home = home games only, away = away games only.
+cornersHighest_overall / cornersLowest_overall
+Season's Highest / Lowest corner counts.
+cornersAgainst_overall / home / away
+Season's corners against.
+Overall = all games, home = home games only, away = away games only.
+cornersAgainstAVG_overall / home / away
+Season's average corners against.
+Overall = all games, home = home games only, away = away games only.
+shotsTotal_overall / home / away
+Season's shots.
+Overall = all games, home = home games only, away = away games only.
+shotsAVG_overall / home / away
+Season's shots.
+Overall = all games, home = home games only, away = away games only.
+shotsOnTargetTotal_overall / home / away
+Season's shots on target.
+Overall = all games, home = home games only, away = away games only.
+shotsOffTargetTotal_overall / home / away
+Season's shots off target.
+Overall = all games, home = home games only, away = away games only.
+shotsOnTargetAVG_overall / home / away
+Season's shots on target average.
+Overall = all games, home = home games only, away = away games only.
+shotsOffTargetAVG_overall / home / away
+Season's shots off target average.
+Overall = all games, home = home games only, away = away games only.
+possessionAVG_overall / home / away
+Season's possession average.
+Overall = all games, home = home games only, away = away games only.
+foulsAVG_overall / home / away
+Season's fouls average.
+Overall = all games, home = home games only, away = away games only.
+foulsTotal_overall / fhome / away
+Season's total fouls.
+Overall = all games, home = home games only, away = away games only.
+offsidesTotal_overall / home / away
+Season's total offsides.
+Overall = all games, home = home games only, away = away games only.
+offsidesTeamTotal_overall / home / away
+Season's total team offsides.
+Overall = all games, home = home games only, away = away games only.
+offsidesRecorded_matches_overall / home / away
+Season's offsides recorded per match.
+Overall = all games, home = home games only, away = away games only.
+offsidesAVG_overall / home / away
+Season's average offsides.
+Overall = all games, home = home games only, away = away games only.
+offsidesTeamAVG_overall / home / away
+Season's team average offsides.
+Overall = all games, home = home games only, away = away games only.
+offsidesOver05_overall - offsidesOver65_overall / home / away
+Season's count of Over (0,5 - 6.5) offsides.
+Overall = all games, home = home games only, away = away games only.
+over05OffsidesPercentage_overall - over65OffsidesPercentage_overall / home / away
+Season's percentage of Over (0,5 - 6.5) offsides.
+Overall = all games, home = home games only, away = away games only.
+offsidesTeamOver05_overall - offsidesTeamOver65_overall / home / away
+Season's count of Over (0,5 - 6.5) Team offsides.
+Overall = all games, home = home games only, away = away games only.
+over05OffsidesTeamPercentage_overall - over65OffsidesTeamPercentage_overall / home / away
+Season's percentage of Over (0,5 - 6.5) Team offsides.
+Overall = all games, home = home games only, away = away games only.
+scoredBothHalves_overall / home / away
+Season's scored in both halves.
+Overall = all games, home = home games only, away = away games only.
+scoredBothHalvesPercentage_overall / home / away
+Season's scored in both halves percentage.
+Overall = all games, home = home games only, away = away games only.
+seasonMatchesPlayedGoalTimingRecorded_overall / home / away
+Season's matches played goal timing recorded.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_win_overall / home / away
+Season's both teams to score and win count.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_win_percentage_overall / home / away
+Season's both teams to score and win percentage.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_draw_overall / home / away
+Season's both teams to score and draw count.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_draw_percentage_overall / home / away
+Season's both teams to score and draw percentage.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_lose_overall / home / away
+Season's both teams to score and lose count.
+Overall = all games, home = home games only, away = away games only.
+BTTS_and_lose_percentage_overall / home / away
+Season's both teams to score and lose percentage.
+Overall = all games, home = home games only, away = away games only.
+AVG_2hg_overall / home / away
+Average second half total goals.
+Overall = all games, home = home games only, away = away games only.
+scored_2hg_avg_overall / home / away
+Average second half goals scored.
+Overall = all games, home = home games only, away = away games only.
+conceded_2hg_avg_overall / home / away
+Average second half goals conceded.
+Overall = all games, home = home games only, away = away games only.
+total_2hg_overall / home / away
+Total second half goals.
+Overall = all games, home = home games only, away = away games only.
+conceded_2hg_overall / home / away
+Total second half goals conceded.
+Overall = all games, home = home games only, away = away games only.
+scored_2hg_overall / home / away
+Total second half goals scored.
+Overall = all games, home = home games only, away = away games only.
+over05_2hg_num_overall - over25_2hg_num_overall / home / away
+Season's count of Over (0,5 - 2.5) second half goals.
+Overall = all games, home = home games only, away = away games only.
+over05_2hg_percentage_overall - over25_2hg_percentage_overall / home / away
+Season's percentage of Over (0,5 - 2.5) second half goals.
+Overall = all games, home = home games only, away = away games only.
+points_2hg_overall / home / away
+Season's points gained in second half.
+Overall = all games, home = home games only, away = away games only.
+ppg_2hg_overall / home / away
+Season's point per game in second half.
+Overall = all games, home = home games only, away = away games only.
+wins_2hg_overall / home / away
+Season's wins in second half.
+Overall = all games, home = home games only, away = away games only.
+wins_2hg_percentage_overall / home / away
+Season's wins percentage in second half.
+Overall = all games, home = home games only, away = away games only.
+draws_2hg_overall / home / away
+Season's draws in second half.
+Overall = all games, home = home games only, away = away games only.
+draws_2hg_percentage_overall / home / away
+Season's draws percentage in second half.
+Overall = all games, home = home games only, away = away games only.
+losses_2hg_overall / home / away
+Season's loses in second half.
+Overall = all games, home = home games only, away = away games only.
+losses_2hg_percentage_overall / home / away
+Season's losses percentage in second half.
+Overall = all games, home = home games only, away = away games only.
+gd_2hg_overall / home / away
+Season's goal difference in second half.
+Overall = all games, home = home games only, away = away games only.
+btts_2hg_overall / home / away
+Season's both teams to score in second half.
+Overall = all games, home = home games only, away = away games only.
+btts_2hg_percentage_overall / home / away
+Season's percentage of both teams to score in second half.
+Overall = all games, home = home games only, away = away games only.
+btts_fhg_overall / home / away
+Season's both teams to score in first half.
+Overall = all games, home = home games only, away = away games only.
+btts_fhg_percentage_overall / home / away
+Season's percentage of both teams to score in first half.
+Overall = all games, home = home games only, away = away games only.
+cs_2hg_overall / home / away
+Season's clean sheets in second half.
+Overall = all games, home = home games only, away = away games only.
+cs_2hg_percentage_overall / home / away
+Season's clean sheets percentage in second half.
+Overall = all games, home = home games only, away = away games only.
+fts_2hg_overall / home / away
+Season's first to score in second half.
+Overall = all games, home = home games only, away = away games only.
+fts_2hg_percentage_overall / home / away
+Season's first to score percentage in second half.
+Overall = all games, home = home games only, away = away games only.
+BTTS_both_halves_overall / home / away
+Season's both teams to score in both halves.
+Overall = all games, home = home games only, away = away games only.
+BTTS_both_halves_percentage_overall / home / away
+Season's both teams to score percentage in both halves.
+Overall = all games, home = home games only, away = away games only.
+average_attendance_overall / home / away
+Season's average attendance.
+Overall = all games, home = home games only, away = away games only.
+cornerTimingRecorded_matches_overall / home / away
+Timing of the corners recorded.
+Overall = all games, home = home games only, away = away games only.
+corners_fh_overall / home / away
+Seasons first half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_2h_overall / home / away
+Seasons second half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_fh_avg_overall / home / away
+Seasons first half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_fh_over4_overall - corners_fh_over6_overall / home / away
+Seasons Over (4 - 6) first half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_2h_over4_overall - corners_2h_over6_overall / home / away
+Seasons Over (4 - 6) second half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_fh_over4_percentage_overall - corners_fh_over6_percentage_overall / home / away
+Seasons Over (4 - 6) first half corners.
+Overall = all games, home = home games only, away = away games only.
+corners_2h_over4_percentage_overall - corners_2h_over6_percentage_overall / home / away
+Seasons Over (4 - 6) second half corners.
+Overall = all games, home = home games only, away = away games only.
+attack_num_recoded_matches_overall / home / away
+Season's count of attacks recorded per match.
+Overall = all games, home = home games only, away = away games only.
+dangerous_attacks_avg_overall / home / away
+Season's count of dangerous attacks recorder per match.
+Overall = all games, home = home games only, away = away games only.
+xg_for_overall / home / away
+Season's average xg for average.
+Overall = all games, home = home games only, away = away games only.
+xg_for_avg_overall / home / away
+Season's average xg for average.
+Overall = all games, home = home games only, away = away games only.
+xg_against_avg_overall / home / away
+Season's average xg against average.
+Overall = all games, home = home games only, away = away games only.
+attacks_num_overall / home / away
+Number of attacks.
+Overall = all games, home = home games only, away = away games only.
+seasonScoredOver05Num_overall - seasonScoredOver35Num_overall / home / away
+Seasons Over (0.5 - 3.5) scored.
+Overall = all games, home = home games only, away = away games only.
+seasonScoredOver05PercentageNum_overall - seasonScoredOver35PercentageNum_overall / home / away
+Seasons percentage of Over (0.5 - 3.5) scored.
+Overall = all games, home = home games only, away = away games only.
+seasonConcededOver05Num_overall - seasonConcededOver35Num_overall / home / away
+Seasons Over (0.5 - 3.5) Conceded.
+Overall = all games, home = home games only, away = away games only.
+seasonConcededOver05PercentageNum_overall - seasonConcededOver35PercentageNum_overall / home / away
+Seasons percentage of Over (0.5 - 3.5) Conceded.
+Overall = all games, home = home games only, away = away games only.
+cardTimingRecorded_matches_overall / home / away
+Cards timing recorded in match.
+Overall = all games, home = home games only, away = away games only.
+cardsRecorded_matches_overall / home / away
+Cards recorded in match.
+Overall = all games, home = home games only, away = away games only.
+fh_cards_total_overall / home / away
+First half cards total.
+Overall = all games, home = home games only, away = away games only.
+2h_cards_total_overall / home / away
+Second half cards total.
+Overall = all games, home = home games only, away = away games only.
+fh_cards_for_total_overall / home / away
+First half cards for total.
+Overall = all games, home = home games only, away = away games only.
+2h_cards_for_total_overall / home / away
+Second half cards for total.
+Overall = all games, home = home games only, away = away games only.
+fh_cards_against_total_overall / home / away
+First half cards against total.
+Overall = all games, home = home games only, away = away games only.
+2h_cards_against_total_overall / home / away
+Second half cards against total.
+Overall = all games, home = home games only, away = away games only.
+fh_total_cards_under2_percentage_overall / home / away
+First half total cards under 2 percentage.
+Overall = all games, home = home games only, away = away games only.
+2h_total_cards_under2_percentage_overall / home / away
+Second half total cards under 2 percentage.
+Overall = all games, home = home games only, away = away games only.
+fh_total_cards_2to3_percentage_overall / home / away
+First half total cards 2 to 3 percentage.
+Overall = all games, home = home games only, away = away games only.
+2h_total_cards_2to3_percentage_overall / home / away
+Second half total cards 2 to 3 percentage.
+Overall = all games, home = home games only, away = away games only.
+fh_total_cards_over3_percentage_overall / fhome / away
+First half total cards over 3 percentage.
+Overall = all games, home = home games only, away = away games only.
+2h_total_cards_over3_percentage_overall / home / away
+Second half total cards over 3 percentage.
+Overall = all games, home = home games only, away = away games only.
+fh_half_with_most_cards_total_percentage_overall / home / away
+First half with most cards total percentage.
+Overall = all games, home = home games only, away = away games only.
+2h_half_with_most_cards_total_percentage_overall / home / away
+Second half with most cards total percentage.
+Overall = all games, home = home games only, away = away games only.
+fh_cards_for_over05_percentage_overall / home / away
+First half cards for the team, Over 0.5.
+Overall = all games, home = home games only, away = away games only.
+2h_cards_for_over05_percentage_overall / home / away
+Second half cards for the team, Over 0.5.
+Overall = all games, home = home games only, away = away games only.
+cards_for_overall / home / away
+Cards for overall.
+Overall = all games, home = home games only, away = away games only.
+cards_against_overall / home / away
+Cards against overall.
+Overall = all games, home = home games only, away = away games only.
+cards_for_avg_overall / home / away
+Average cards for overall.
+Overall = all games, home = home games only, away = away games only.
+cards_against_avg_overall / home / away
+Average cards against overall.
+Overall = all games, home = home games only, away = away games only.
+cards_total_overall / home / away
+Total cards.
+Overall = all games, home = home games only, away = away games only.
+cards_total_avg_overall / home / away
+Average total cards.
+Overall = all games, home = home games only, away = away games only.
+penalties_won_overall / home / away
+Penatlies won.
+Overall = all games, home = home games only, away = away games only.
+penalties_scored_overall / home / away
+Penatlies scored.
+Overall = all games, home = home games only, away = away games only.
+penalties_missed_overall / home / away
+Penalties missed.
+Overall = all games, home = home games only, away = away games only.
+penalties_won_per_match_overall / home / away
+Penalties won per match.
+Overall = all games, home = home games only, away = away games only.
+penalties_recorded_matches_overall / home / away
+Penalties recorded per match.
+Overall = all games, home = home games only, away = away games only.
+exact_team_goals_0_ft_overall - exact_team_goals_3_ft_overall / home / away
+Number of times the team scored exactly (0 - 3) goals at full time.
+Overall = all games, home = home games only, away = away games only.
+match_shots_over225_num_overall - match_shots_over265_num_overall / home / away
+Count of match shots Over (22.5 - 26.5).
+Overall = all games, home = home games only, away = away games only.
+match_shots_over225_percentage_overall - match_shots_over265_percentage_overall / home / away
+Percentage of match shots Over (22.5 - 26.5).
+Overall = all games, home = home games only, away = away games only.
+match_shots_on_target_over75_num_overall - match_shots_on_target_over95_num_overall / home / away
+Number of match shots Over (7.5 - 9.5).
+Overall = all games, home = home games only, away = away games only.
+match_shots_on_target_over75_percentage_overall - match_shots_on_target_over95_percentage_overall / home / away
+Percentage of match shots Over (7.5 - 9.5).
+Overall = all games, home = home games only, away = away games only.
+team_shots_over105_num_overall - team_shots_over155_num_overall / home / away
+Number of team shots Over (10.5 - 15.5).
+Overall = all games, home = home games only, away = away games only.
+team_shots_over105_percentage_overall - team_shots_over155_percentage_overall / home / away
+Percentage of team shots Over (10.5 - 15.5).
+Overall = all games, home = home games only, away = away games only.
+team_shots_on_target_over35_num_overall - team_shots_on_target_over65_num_overall / home / away
+Number of team shots on target Over (3.5 - 6.5).
+Overall = all games, home = home games only, away = away games only.
+team_shots_on_target_over35_percentage_overall - team_shots_on_target_over65_percentage_overall / home / away
+Percentage of team shots on target Over (3.5 - 6.5).
+Overall = all games, home = home games only, away = away games only.
+win_0_10_num_overall / home / away
+Win count between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+draw_0_10_num_overall / home / away
+Draw count between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+loss_0_10_num_overall / home / away
+Loss count between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+win_0_10_percentage_overall / home / away
+Win percentage between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+draw_0_10_percentage_overall / home / away
+Draw percentage between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+loss_0_10_percentage_overall / home / away
+Loss percentage between minute 0 and 10, this parameter does not inherit the score of the game and focuses only on the first 0 to 10 minutes.
+Overall = all games, home = home games only, away = away games only.
+total_goal_over05_0_10_num_overall / home / away
+Count of over 0.5 goals between minute 0 and 10.
+Overall = all games, home = home games only, away = away games only.
+total_corner_over05_0_10_num_overall / home / away
+Count of over 0.5 corners between minute 0 and 10.
+Overall = all games, home = home games only, away = away games only.
+total_goal_over05_0_10_percentage_overall / home / away
+Percentage of over 0.5 goals between minute 0 and 10.
+Overall = all games, home = home games only, away = away games only.
+total_corner_over05_0_10_percentage_overall / home / away
+Percentage of over 0.5 corners between minute 0 and 10.
+Overall = all games, home = home games only, away = away games only.
+fouls_recorded_overall / home / away
+Fouls recorded.
+Overall = all games, home = home games only, away = away games only.
+fouls_against_num_overall / home / away
+Fouls against recorded.
+Overall = all games, home = home games only, away = away games only.
+fouls_against_avg_overall / home / away
+Average fouls against recorded.
+Overall = all games, home = home games only, away = away games only.
+exact_team_goals_0_ft_percentage_overall - exact_team_goals_3_ft_percentage_overall / home / away
+Percentage of (0 - 3) exact team goals.
+Overall = all games, home = home games only, away = away games only.
+exact_total_goals_0_ft_overall - exact_total_goals_7_ft_overall / home / away
+Percentage of (0 - 7) exact team goals.
+Overall = all games, home = home games only, away = away games only.
+shots_recorded_matches_num_overall / home / away
+Number of shots recorded per matches.
+Overall = all games, home = home games only, away = away games only.
+over25_and_btts_num_overall / home / away
+Count of over 2.5 and BTTS.
+Overall = all games, home = home games only, away = away games only.
+over25_and_no_btts_num_overall / home / away
+Count of over 2.5 and NO BTTS.
+Overall = all games, home = home games only, away = away games only.
+over25_and_btts_percentage_overall / home / away
+Percentage of over 2.5 and BTTS.
+Overall = all games, home = home games only, away = away games only.
+over25_and_no_btts_percentage_overall / home / away
+Percentage of over 2.5 and NO BTTS.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_yes_yes_num_overall / home / away
+Count of BTTS first half yes & BTTS second half yes.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_yes_no_num_overall / home / away
+Count of BTTS first half yes & BTTS second half no.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_no_no_num_overall / home / away
+Count of BTTS first half no & BTTS second half no.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_no_yes_num_overall / home / away
+Count of BTTS first half no & BTTS second half yes.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_yes_yes_percentage_overall / home / away
+Percentage of BTTS first half yes & BTTS second half yes.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_yes_no_percentage_overall / home / away
+Percentage of BTTS first half yes & BTTS second half no.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_no_no_percentage_overall / home / away
+Percentage of BTTS first half no & BTTS second half no.
+Overall = all games, home = home games only, away = away games only.
+btts_1h2h_no_yes_percentage_overall / home / away
+Percentage of BTTS first half no & BTTS second half yes.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_1h_num_overall / home / away
+Number of times the half with most goals was the 1st half.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_tie_num_overall / home / away
+Number of times the half with most goals was a tie between 1st and 2nd half.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_2h_num_overall / home / away
+Number of times the half with most goals was the 2nd half.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_1h_percentage_overall / home / away
+Percentage of times the half with most goals was the 1st half.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_tie_percentage_overall / home / away
+Percentage of times the half with most goals was a tie between 1st and 2nd half.
+Overall = all games, home = home games only, away = away games only.
+half_with_most_goals_is_2h_percentage_overall / home / away
+Percentage of times the half with most goals was the 2nd half.
+Overall = all games, home = home games only, away = away games only.
+shot_conversion_rate_overall / home / away
+Shot conversion rate.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_num_overall / home / away
+Number of times the team had the most corners.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_1h_num_overall / home / away
+Number of times the team had the most corners in 1st half.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_2h_num_overall / home / away
+Number of times the team had the most corners in 2nd half.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_percentage_overall / home / away
+Percentage of times the team had the most corners in the match.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_1h_percentage_overall / home / away
+Percentage of times the team had the most corners in 1st half.
+Overall = all games, home = home games only, away = away games only.
+team_with_most_corners_win_2h_percentage_overall / home / away
+Percentage of times the team had the most corners in 2nd half.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_num_overall / home / away
+Total number of 1st half corner kicks that this team earned this season in this competition.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_2h_num_overall / home / away
+Total number of 2nd half corner kicks that this team earned this season in this competition.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_avg_overall / home / away
+Average number of 1st half corner kicks per match that this team earned this season in this competition. Average = total number divided number of matches.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_2h_avg_overall / home / away
+Average number of 2nd half corner kicks per match that this team earned this season in this competition. Average = total number divided number of matches.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_over2_num_overall / home / away
+Number of times this team has earned more than 2 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_2h_over2_num_overall / home / away
+Number of times this team has earned more than 2 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_over3_num_overall / home / away
+Number of times this team has earned more than 3 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_2h_over3_num_overall / home / away
+Number of times this team has earned more than 3 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_2_to_3_num_overall / home / away
+Number of times this team has earned 2 or 3 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_2h_2_to_3_num_overall / home / away
+Number of times this team has earned 2 or 3 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only.
+corners_earned_1h_over2_percentage_overall / home / away
+Percentage of matches this team has earned more than 2 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of Over 2 corners in 1st half divided by number of matches this team played where corner timings were recorded.
+corners_earned_2h_over2_percentage_overall / home / away
+Percentage of matches this team has earned more than 2 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of Over 2 corners in 2nd half divided by number of matches this team played where corner timings were recorded.
+corners_earned_1h_over3_percentage_overall / home / away
+Percentage of matches this team has earned more than 3 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of Over 3 corners in 1st half divided by number of matches this team played where corner timings were recorded.
+corners_earned_2h_over3_percentage_overall / home / away
+Percentage of matches this team has earned more than 3 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of Over 3 corners in 2nd half divided by number of matches this team played where corner timings were recorded.
+corners_earned_1h_2_to_3_percentage_overall / home / away
+Percentage of matches this team has earned 2 or 3 corner kicks in the 1st half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of 2 to 3 corners in 1st half divided by number of matches this team played where corner timings were recorded.
+corners_earned_2h_2_to_3_percentage_overall / home / away
+Percentage of matches this team has earned 2 or 3 corner kicks in the 2nd half this season.
+Overall = all games, home = home games only, away = away games only. Percentage calculation = number of matches of 2 to 3 corners in 2nd half divided by number of matches this team played where corner timings were recorded.
+penalties_conceded_overall / home / away
+Penalty kicks conceded by this team this season.
+penalty_in_a_match_overall / home / away
+Number of matches where there was at least 1 penalty kick by either team this season.
+penalty_in_a_match_percentage_overall / home / away
+Percentage of matches where there was at least 1 penalty kick by either team this season.
+goal_kicks_recorded_matches_overall / home / away
+Number of matches where goal kicks were recorded this season.
+goal_kicks_team_num_overall / home / away
+Number of goal kicks by this team this season.
+goal_kicks_total_num_overall / home / away
+Number of total goal kicks by both teams this season.
+goal_kicks_team_avg_overall / home / away
+Average number of goal kicks per match by this teams this season.
+goal_kicks_total_avg_overall / home / away
+Average number of total goal kicks per match by both teams this season.
+goal_kicks_team_over35_overall ~ goal_kicks_team_over115_overall / home / away
+Number of matches where this team performed Over 3.5 ~ Over 11.5 goal kicks this season.
+goal_kicks_total_over85_overall ~ goal_kicks_total_over185_overall / home / away
+Number of matches where both teams in total performed Over 8.5 ~ Over 18.5 goal kicks this season.
+throwins_recorded_matches_overall / home / away
+Number of matches where throw-ins were recorded this season.
+throwins_team_num_overall / home / away
+Number of throw-ins by this team this season.
+throwins_total_num_overall / home / away
+Number of total throw-ins by both teams this season.
+throwins_team_avg_overall / home / away
+Average number of throw-ins per match by this teams this season.
+throwins_total_avg_overall / home / away
+Average number of total throw-ins per match by both teams this season.
+throwins_team_over155_overall ~ throwins_team_over245_overall / home / away
+Number of matches where this team performed Over 15.5 ~ Over 24.5 goal throw-ins this season.
+goals_scored_min_0_to_10 - goals_scored_min_81_to_90
+Number of goals scored during this time period. This season
+goals_conceded_min_0_to_10 - goals_conceded_min_81_to_90
+Number of goals conceded during this time period. This season
+goals_all_min_0_to_10 - goals_all_min_81_to_90
+Number of goals scored and conceded during this time period. This season. This is in 10 minute increments.
+goals_all_min_0_to_15 - goals_all_min_76_to_90
+Number of goals scored and conceded during this time period. This season. This is in 15 minute increments.
+goals_scored_min_0_to_15 - goals_scored_min_76_to_90
+Number of goals scored during this time period. This season. This is in 15 minute increments.
+goals_conceded_min_0_to_15 - goals_conceded_min_76_to_90
+Number of goals conceded during this time period. This season. This is in 15 minute increments.
+goals_scored_min_0_to_10_home - goals_scored_min_81_to_90_home / goals_scored_min_0_to_10_away - goals_scored_min_81_to_90_away
+Number of goals scored during this time period. This season at home games only or away games only.
+goals_scored_min_0_to_15_home - goals_scored_min_76_to_90_home / goals_scored_min_0_to_15_away - goals_scored_min_76_to_90_away
+Number of goals scored during this time period. This season at home games only or away games only. This is in 15 minute increments.
+goals_conceded_min_0_to_10_home - goals_conceded_min_81_to_90_home / goals_conceded_min_0_to_10_away - goals_conceded_min_81_to_90_away
+Number of goals conceded during this time period. This season at home games only or at away games only.
+goals_conceded_min_0_to_15_home - goals_conceded_min_76_to_90_home / goals_conceded_min_0_to_15_away - goals_conceded_min_76_to_90_away
+Number of goals scored during this time period. This season at home games only or away games only. This is in 15 minute increments.
+goals_all_min_0_to_10_home - goals_all_min_81_to_90_home / goals_all_min_0_to_10_away - goals_all_min_81_to_90_away
+Number of goals scored and conceded during this time period. This season at home games only or away games only.
+goals_all_min_0_to_15_home - goals_all_min_76_to_90_home / goals_all_min_0_to_15_away - goals_all_min_76_to_90_away
+Number of goals scored and conceded during this time period. This season at home games only or at away games only. This is in 15 minute increments.
+name_pt - name_fi
+Name of the team in the following languages : Spanish, Portuguese, Korean, Turkish, Arabic, Japanese, Russian, German, Swedish, Chinese Traditional, Chinese Simplified, Greek, Polish, Thai, French, Croatian, Czech, Hungarian, Danish, Vietnamese, Slovakian, Bulgarian, Finnish. Not all languages are always available and may default to English depending on availability.
+women
+1 = Women's team. Null = Men's team
+prediction_risk
+Prediction Risk represents how often a team scores or concedes goals within close proximity of each other. For example - if Manchester United Scores a goal at min 55', and then concedes immediately at min 58', it will increase their Risk rating. The more times this happens across a single season, the more risk there is of unexpected goals occurring.

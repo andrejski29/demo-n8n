@@ -1,0 +1,147 @@
+id
+ID of the match.
+homeID
+ID of the home team.
+awayID
+ID of the away team.
+season
+Season of the league.
+status
+Status of the match
+('complete', 'suspended', 'canceled', 'incomplete').
+roundID
+Round ID of the match within the season.
+game_week
+Game week of the match within the season.
+homeGoals
+Goal timings for home team goals. Array.
+awayGoals
+Goal timings for away team goals. Array.
+homeGoalCount
+Number of home team goals.
+awayGoalCount
+Number of away team goals.
+totalGoalCount
+Number of total match goals.
+team_a_corners
+Number of Home Team Corners.
+team_b_corners
+Number of Away Team Corners.
+team_a_offsides
+Number of Offsides - Home Team.
+team_b_offsides
+Number of Offsides - Away Team.
+team_a_yellow_cards
+Number of yellow cards - Home Team.
+team_b_yellow_cards
+Number of yellow cards - Away Team.
+team_a_red_cards
+Number of Red Cards - Home Team.
+team_b_red_cards
+Number of Red Cards - Away Team.
+team_a_shotsOnTarget
+Number of Shots On Target - Home Team.
+team_b_shotsOnTarget
+Number of Shots On Target - Away Team.
+team_a_shotsOffTarget
+Number of Shots Off Target - Home Team.
+team_b_shotsOffTarget
+Number of Shots Off Target - Away Team.
+team_a_shots
+Number of Shots - Home Team.
+team_b_shots
+Number of Shots - Away Team.
+team_a_fouls
+Number of Fouls - Home Team.
+team_b_fouls
+Number of Fouls - Away Team.
+team_a_possession
+Possession of the Home Team.
+team_b_possession
+Possession of the Away Team.
+refereeID
+ID of the referee for this match.
+coach_a_ID
+ID of the coach for home team.
+coach_b_ID
+ID of the coach for away team.
+stadium_name
+Name of the stadium.
+stadium_location
+Location of the stadium.
+team_a_cards_num
+Number of cards for home team.
+team_b_cards_num
+Number of cards for away team.
+odds_ft_1
+Odds for Home Team Win at FT.
+odds_ft_x
+Odds for Draw at FT.
+odds_ft_2
+Odds for Away Team Win at FT.
+odds_ft_over05 - odds_ft_over45
+Odds for Over 0.5 - 4.5 match goals.
+odds_ft_under05 - odds_ft_under45
+Odds for Under 0.5 - 4.5 match goals.
+odds_btts_yes / no
+Odds for BTTS Yes / No.
+odds_team_a_cs_yes / a_cs_no / b_cs_yes / b_cs_no
+Odds for Clean Sheet Yes / No for Home and Away team.
+overallGoalCount
+Total number of goals in the match.
+ht_goals_team_a
+Number of home team goals by HT.
+ht_goals_team_b
+Number of away team goals by HT.
+HTGoalCount
+Total number of goals by HT.
+date_unix
+UNIX timestamp of the match kick off.
+winningTeam
+ID of the team that won. -1 if draw.
+no_home_away
+set to 1 if there is no home or away distinction for this match.
+btts_potential
+Pre-Match Stat for BTTS for both teams. Average between both teams.
+o15_potential - o45_potential
+Pre-Match Stat for Over 1.5 - 4.5 for both teams. Average between both teams.
+o05HT_potential - o15HT_potential
+Pre-Match Stat for Over 0.5 - 1.5 for both teams by HT. Average between both teams.
+corners_potential
+Pre-Match average corners for both teams.
+offsides_potential
+Pre-Match average offsides for both teams.
+cards_potential
+Pre-Match average cards for both teams.
+avg_potential
+Pre-Match average total goals per match for both teams.
+corners_o85_potential - corners_o105_potential
+Pre-Match Over X Corners for both teams.
+u15_potential - u45_potential
+Pre-Match Stat for Under 1.5 - 4.5 for both teams. Average between both teams.
+home_ppg
+Points per game for home team. Current.
+away_ppg
+Points per game for away team. Current.
+pre_match_home_ppg
+Pre-Match Points Per Game for Home Team.
+pre_match_away_ppg
+Pre-Match Points Per Game for Away Team.
+competition_id
+Season ID of the league.
+over05 - over55
+Set to true if the match ended with Over X goals.
+btts
+Set to true if match ended with BTTS.
+lineups
+Players and their IDs that have participated in this match as the starting 11. Cards and Goal timings are also included.
+bench
+Players that have started on the bench. Includes time of substitution if substituted. Cards and Goal timings are also included.
+trends
+Textual representation of statistical trends for team_a (Home) and team_b (Away).
+team_a_card_details / team_b_card_details
+Yellow/Red Card details - Player ID, Card type, and timing of booking.
+h2h
+Head to Head stats, including over X, wins, win percentages, previous match scores, and previous match ids.
+odds_comparison
+Full line of odds.
