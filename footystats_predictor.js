@@ -156,8 +156,8 @@ class DataParser {
 
     // Helper to find specific season
     const findSeason = (targetSeason) => {
-        // 1. Try Exact Competition Match (Best)
-        if (matchCompID) {
+        // 1. Try Exact Competition Match (Best) - ONLY if matchCompID is valid (>0)
+        if (matchCompID && matchCompID > 0) {
             const exactComp = teamRows.find(r => r.season === targetSeason && r.competition_id === matchCompID);
             if (exactComp) return exactComp;
         }
@@ -629,6 +629,9 @@ class PickRanker {
     }
 
     _addPick(market, selection, line, prob, bestOddsObj) {
+        // Hard Filter: Skip if probability is too low
+        if (prob < CONFIG.min_prob_pick) return;
+
         const fair = 1 / prob;
         let edge = 0;
         let rank = 0;
@@ -662,7 +665,6 @@ class PickRanker {
         }
 
         if (prob > 0.7) tags.push("HIGH_CONFIDENCE");
-        if (prob < CONFIG.min_prob_pick) tags.push("HIGH_RISK");
 
         this.picks.push({
             market,
