@@ -683,7 +683,48 @@ function analyzeMatch(inputJson) {
     }
 }
 
-// Ensure it works in Node environment for testing
+// ============================================================================
+// 6. N8N EXECUTION BLOCK
+// ============================================================================
+
+// Detect if running in n8n (items is defined globally in Code node)
+if (typeof items !== 'undefined' && Array.isArray(items)) {
+    const results = items.map(item => {
+        try {
+            // item.json is expected to be the Array of FootyStats data (Merge.json structure)
+            // If the input is wrapped differently, adjust here.
+            // Based on user description: "Merge.json (one object per match) which already contains all data"
+            // So item.json IS that array.
+
+            // Check if item.json is the array, or if it's inside item.json.data
+            let inputData = item.json;
+
+            // Safety check: if input is not an array (DataParser expects array), wrap it or dig?
+            // The DataParser handles "data" property unwrap, but expects the root to be an array of API responses.
+            if (!Array.isArray(inputData) && inputData.data && Array.isArray(inputData.data)) {
+                 inputData = inputData.data;
+            } else if (!Array.isArray(inputData)) {
+                 // If it's a single object, maybe it's just one response? Wrap it.
+                 inputData = [inputData];
+            }
+
+            const analysis = analyzeMatch(inputData);
+            return { json: analysis };
+        } catch (error) {
+            return {
+                json: {
+                    error: error.message,
+                    stack: error.stack,
+                    input_summary: "Input processing failed"
+                }
+            };
+        }
+    });
+
+    return results;
+}
+
+// Ensure it works in Node environment for testing (local run)
 if (typeof module !== 'undefined') {
     module.exports = { analyzeMatch, DataParser, FeatureEngineer, PoissonEngine };
 }
