@@ -35,6 +35,8 @@ const CONFIG = {
 
   // Picks
   min_edge: 0.0, // Minimum edge to consider a value pick
+  min_prob_pick: 0.30,
+  bankroll_pct_kelly: 0.05,
   debug: true
 };
 
@@ -116,6 +118,8 @@ class DataParser {
     // We flatmap the inputs that were arrays.
 
     let allTeamSeasons = [];
+    let lastXCandidates = [];
+
     this.rawData.forEach(item => {
         let root = item;
         if (item.json) root = item.json;
@@ -123,45 +127,72 @@ class DataParser {
 
         if(Array.isArray(d)) {
             allTeamSeasons = allTeamSeasons.concat(d);
+        } else {
+            // Check for Last X (support both field names)
+            const lx = d.last_x || d.last_x_match_num;
+            if (lx && d.id) {
+                d._last_x_val = lx;
+                lastXCandidates.push(d);
+            }
         }
     });
+
+    const matchCompID = this.matchDetails.competition_id;
 
     // Select Home Team Rows
-    this.homeStatsRows = this._selectSeasonRows(allTeamSeasons, homeID);
+    this.homeStatsRows = this._selectSeasonRows(allTeamSeasons, homeID, matchCompID);
 
     // Select Away Team Rows
-    this.awayStatsRows = this._selectSeasonRows(allTeamSeasons, awayID);
+    this.awayStatsRows = this._selectSeasonRows(allTeamSeasons, awayID, matchCompID);
 
-    // Resolve Last X
-    // The input structure for Last X in Merge.json is usually a single object per file content.
-    // We check this.tempLastX if popualted, or scan rawData again looking for single objects with 'last_x'
-
-    this.rawData.forEach(item => {
-        let root = item;
-        if (item.json) root = item.json;
-        const d = root.data || root;
-
-        if (d.last_x && d.id) {
-            if (d.id === homeID) this.homeLast5 = d;
-            if (d.id === awayID) this.awayLast5 = d;
-        }
-        // Sometimes Last X is inside an array? No, usually single object.
-        // But in the provided Merge.json example, it looks like an array of objects is returned for the team stats
-        // and separate objects for Last X.
-    });
+    // Resolve Last X (Prefer 5, then 6, then 10)
+    this.homeLast5 = this._selectBestLastX(lastXCandidates, homeID);
+    this.awayLast5 = this._selectBestLastX(lastXCandidates, awayID);
   }
 
-  _selectSeasonRows(allRows, teamID) {
-    // Filter by Team ID and Domestic League
-    const teamRows = allRows.filter(r => r.id === teamID && (r.season_format === CONFIG.season_format_filter || r.season_format === "Domestic League"));
+  _selectSeasonRows(allRows, teamID, matchCompID) {
+    // Filter rows for this team
+    const teamRows = allRows.filter(r => r.id === teamID);
 
-    const current = teamRows.find(r => r.season === CONFIG.season_current);
-    const prev = teamRows.find(r => r.season === CONFIG.season_prev);
+    // Helper to find specific season
+    const findSeason = (targetSeason) => {
+        // 1. Try Exact Competition Match (Best)
+        if (matchCompID) {
+            const exactComp = teamRows.find(r => r.season === targetSeason && r.competition_id === matchCompID);
+            if (exactComp) return exactComp;
+        }
+        // 2. Fallback to "Domestic League"
+        const domestic = teamRows.find(r => r.season === targetSeason && (r.season_format === CONFIG.season_format_filter || r.season_format === "Domestic League"));
+        if (domestic) return domestic;
+
+        return null;
+    };
 
     return {
-        current: current || null,
-        prev: prev || null
+        current: findSeason(CONFIG.season_current) || null,
+        prev: findSeason(CONFIG.season_prev) || null
     };
+  }
+
+  _selectBestLastX(candidates, teamID) {
+      const teamCandidates = candidates.filter(c => c.id === teamID);
+      if (teamCandidates.length === 0) return null;
+
+      // Sort by preference: 5 is best.
+      // We can sort by distance to 5?
+      // actually, typically we have 5, 6, 10.
+      // If we have 5, take it. Else take 6. Else 10.
+
+      const exact5 = teamCandidates.find(c => c._last_x_val === 5);
+      if (exact5) return exact5;
+
+      const exact6 = teamCandidates.find(c => c._last_x_val === 6);
+      if (exact6) return exact6;
+
+      // Fallback: Just take the first one (or smallest number?)
+      // Let's sort by value ascending (5, 6, 10) and take first
+      teamCandidates.sort((a, b) => a._last_x_val - b._last_x_val);
+      return teamCandidates[0];
   }
 
   getCleanInput() {
@@ -602,17 +633,36 @@ class PickRanker {
         let edge = 0;
         let rank = 0;
         let tags = [];
+        let stake = 0;
 
         if (bestOddsObj) {
-            edge = (bestOddsObj.odd * prob) - 1;
-            rank = (edge * 100) + (prob * 20); // Weight edge higher
+            const odds = bestOddsObj.odd;
+            edge = (odds * prob) - 1;
+
+            // Expected Growth = Edge * Prob (This penalizes longshots with high edge but tiny prob)
+            // rank = (edge * 100) * prob;
+            // Let's use a balanced score: (Edge * 100) * (Prob^0.5) to not punish low odds too much?
+            // User requested: (Edge * Prob)
+            rank = (edge * prob) * 100;
+
             if (edge > CONFIG.min_edge) tags.push("VALUE");
+
+            // Kelly Criterion Staking
+            // f* = (bp - q) / b = edge / (odds - 1)
+            if (edge > 0) {
+                const b = odds - 1;
+                const kelly = edge / b;
+                // Cap fraction (e.g. 5%)
+                const capped = Math.max(0, Math.min(kelly, CONFIG.bankroll_pct_kelly));
+                stake = parseFloat(capped.toFixed(4));
+            }
         } else {
             rank = prob * 10; // Fallback ranking by confidence
             tags.push("NO_ODDS");
         }
 
         if (prob > 0.7) tags.push("HIGH_CONFIDENCE");
+        if (prob < CONFIG.min_prob_pick) tags.push("HIGH_RISK");
 
         this.picks.push({
             market,
@@ -623,6 +673,7 @@ class PickRanker {
             best_odds: bestOddsObj ? bestOddsObj.odd : null,
             bookmaker: bestOddsObj ? bestOddsObj.bookmaker : null,
             edge: parseFloat(edge.toFixed(3)),
+            stake_kelly: stake,
             rank_score: parseFloat(rank.toFixed(2)),
             tags
         });
@@ -668,6 +719,19 @@ function analyzeMatch(inputJson) {
             features_derived: features,
             probabilities: probs,
             recommended_picks: picks,
+            backtest: {
+                match_id: parser.matchDetails.id,
+                date: parser.matchDetails.date_unix,
+                competition_id: parser.matchDetails.competition_id,
+                p_home: probs["1X2"]["1"],
+                p_draw: probs["1X2"]["X"],
+                p_away: probs["1X2"]["2"],
+                p_over25: probs["OverUnder"]["2.5"]["Over"],
+                p_btts_yes: probs["BTTS"]["Yes"],
+                fair_home: parseFloat((1/probs["1X2"]["1"]).toFixed(2)),
+                fair_draw: parseFloat((1/probs["1X2"]["X"]).toFixed(2)),
+                fair_away: parseFloat((1/probs["1X2"]["2"]).toFixed(2)),
+            },
             debug: {
                 home_stats_source: parser.homeStatsRows,
                 away_stats_source: parser.awayStatsRows,
