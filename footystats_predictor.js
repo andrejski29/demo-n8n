@@ -36,6 +36,7 @@ const CONFIG = {
   // Picks
   min_edge: 0.0, // Minimum edge to consider a value pick
   min_prob_pick: 0.30,
+  high_confidence_threshold: 0.65,
   bankroll_pct_kelly: 0.05,
   debug: true
 };
@@ -642,16 +643,10 @@ class PickRanker {
             const odds = bestOddsObj.odd;
             edge = (odds * prob) - 1;
 
-            // Expected Growth = Edge * Prob (This penalizes longshots with high edge but tiny prob)
-            // rank = (edge * 100) * prob;
-            // Let's use a balanced score: (Edge * 100) * (Prob^0.5) to not punish low odds too much?
-            // User requested: (Edge * Prob)
+            // Expected Growth = Edge * Prob
             rank = (edge * prob) * 100;
 
-            if (edge > CONFIG.min_edge) tags.push("VALUE");
-
             // Kelly Criterion Staking
-            // f* = (bp - q) / b = edge / (odds - 1)
             if (edge > 0) {
                 const b = odds - 1;
                 const kelly = edge / b;
@@ -664,7 +659,16 @@ class PickRanker {
             tags.push("NO_ODDS");
         }
 
-        if (prob > 0.7) tags.push("HIGH_CONFIDENCE");
+        // --- Filtering Logic ---
+        const isValue = edge > CONFIG.min_edge; // Strictly greater than min_edge (default 0.0)
+        const isHighConfidence = prob >= CONFIG.high_confidence_threshold;
+
+        // If neither Value nor High Confidence, discard this pick
+        // This removes "noise" picks (negative edge & low prob)
+        if (!isValue && !isHighConfidence) return;
+
+        if (isValue) tags.push("VALUE");
+        if (isHighConfidence) tags.push("HIGH_CONFIDENCE");
 
         this.picks.push({
             market,
