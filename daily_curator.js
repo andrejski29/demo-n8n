@@ -29,7 +29,10 @@ const CONFIG = {
     // Overlap Rules
     allow_smart_reuse_from_singles: true,
     allow_mid_reuse_from_singles: false,
-    allow_booster_reuse_from_singles: false
+    allow_booster_reuse_from_singles: false,
+
+    // Global Board Configuration
+    global_board_diversity_strict: false // Option B: Default to per-zone diversity
 };
 
 // ============================================================================
@@ -345,17 +348,22 @@ class DailyCurator {
         // BOOSTER: Values + Upside (Same pool, just different target)
         const boosterPool = [...classified.values, ...classified.upside];
 
-        // Track used matches for global board uniqueness
-        const boardUsedMatches = new Set();
+        // Track used matches for global board uniqueness based on strictness
+        // If strict is true, we use one shared set.
+        // If strict is false, we use separate sets but ensure internal uniqueness within each list.
+        const strict = CONFIG.global_board_diversity_strict;
+
+        const globalUsed = strict ? new Set() : null;
 
         // 1. SAFE COMBOS
         // Target: 2.0 - 3.0 Odds. Prefer 2 legs. Limit ~3
         const safeCombos = [];
         const SAFE_LIMIT = 3;
+        const safeUsed = strict ? globalUsed : new Set();
 
         // Step 1: Try 2 legs
         const safeDoubles = this._generateCombos(
-            safePool, 2, SAFE_LIMIT, 2.0, 3.0, boardUsedMatches, boardUsedMatches
+            safePool, 2, SAFE_LIMIT, 2.0, 3.0, safeUsed, safeUsed
         );
         safeCombos.push(...safeDoubles);
 
@@ -363,7 +371,7 @@ class DailyCurator {
         if (safeCombos.length < SAFE_LIMIT) {
             const needed = SAFE_LIMIT - safeCombos.length;
             const safeTriples = this._generateCombos(
-                safePool, 3, needed, 2.0, 3.0, boardUsedMatches, boardUsedMatches
+                safePool, 3, needed, 2.0, 3.0, safeUsed, safeUsed
             );
             safeCombos.push(...safeTriples);
         }
@@ -372,10 +380,11 @@ class DailyCurator {
         // Target: 3.0 - 5.0 Odds. Prefer 2 legs. Limit ~3
         const balancedCombos = [];
         const BALANCED_LIMIT = 3;
+        const balancedUsed = strict ? globalUsed : new Set();
 
         // Step 1: Try 2 legs
         const balancedDoubles = this._generateCombos(
-            balancedPool, 2, BALANCED_LIMIT, 3.0, 5.0, boardUsedMatches, boardUsedMatches
+            balancedPool, 2, BALANCED_LIMIT, 3.0, 5.0, balancedUsed, balancedUsed
         );
         balancedCombos.push(...balancedDoubles);
 
@@ -383,7 +392,7 @@ class DailyCurator {
         if (balancedCombos.length < BALANCED_LIMIT) {
             const needed = BALANCED_LIMIT - balancedCombos.length;
             const balancedTriples = this._generateCombos(
-                balancedPool, 3, needed, 3.0, 5.0, boardUsedMatches, boardUsedMatches
+                balancedPool, 3, needed, 3.0, 5.0, balancedUsed, balancedUsed
             );
             balancedCombos.push(...balancedTriples);
         }
@@ -392,10 +401,11 @@ class DailyCurator {
         // Target: 8.0+. Prefer 3 legs. Limit ~2
         const boosterCombos = [];
         const BOOSTER_LIMIT = 2;
+        const boosterUsed = strict ? globalUsed : new Set();
 
         // Step 1: Try 3 legs
         const boosterTriples = this._generateCombos(
-            boosterPool, 3, BOOSTER_LIMIT, 8.0, 25.0, boardUsedMatches, boardUsedMatches
+            boosterPool, 3, BOOSTER_LIMIT, 8.0, 25.0, boosterUsed, boosterUsed
         );
         boosterCombos.push(...boosterTriples);
 
@@ -403,7 +413,7 @@ class DailyCurator {
         if (boosterCombos.length < BOOSTER_LIMIT) {
              const needed = BOOSTER_LIMIT - boosterCombos.length;
              const boosterQuads = this._generateCombos(
-                 boosterPool, 4, needed, 8.0, 30.0, boardUsedMatches, boardUsedMatches
+                 boosterPool, 4, needed, 8.0, 30.0, boosterUsed, boosterUsed
              );
              boosterCombos.push(...boosterQuads);
         }
