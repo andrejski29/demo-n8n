@@ -27,7 +27,9 @@ const CONFIG = {
     limit_booster: 1,
 
     // Overlap Rules
-    allow_combo_reuse_from_singles: false
+    allow_smart_reuse_from_singles: true,
+    allow_mid_reuse_from_singles: false,
+    allow_booster_reuse_from_singles: false
 };
 
 // ============================================================================
@@ -135,11 +137,25 @@ class DailyCurator {
                 }
             }
 
+            // Fallback: ISO Date parsed to Paris
             if (d === "UNKNOWN_DATE" && match.summary.date_iso) {
-                if (match.summary.date_iso.includes('T')) {
-                    d = match.summary.date_iso.split('T')[0];
-                } else {
-                    d = match.summary.date_iso;
+                try {
+                    const dateObj = new Date(match.summary.date_iso);
+                    if (!isNaN(dateObj.getTime())) {
+                        d = new Intl.DateTimeFormat('en-CA', {
+                            timeZone: 'Europe/Paris',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                        }).format(dateObj);
+                    } else if (match.summary.date_iso.includes('T')) {
+                         // Last resort string split if Date parse fails
+                        d = match.summary.date_iso.split('T')[0];
+                    } else {
+                        d = match.summary.date_iso;
+                    }
+                } catch (e) {
+                    // keep unknown
                 }
             }
 
@@ -221,24 +237,58 @@ class DailyCurator {
         const upsidePicks = this._selectUpside(classified, corePicks, valuePicks);
 
         // 3. Combos
-        const usedMatchesGlobal = new Set();
+        // Gather matches used in Singles for exclusion logic
+        const matchesInSingles = new Set();
+        [...corePicks, ...valuePicks, ...upsidePicks].forEach(p => matchesInSingles.add(p.match_id));
 
-        // Exclude matches already used in Single Sections if configured
-        if (CONFIG.allow_combo_reuse_from_singles === false) {
-            [...corePicks, ...valuePicks, ...upsidePicks].forEach(p => usedMatchesGlobal.add(p.match_id));
-        }
+        // Track matches consumed by generated combos to ensure cross-combo uniqueness
+        const matchesInCombos = new Set();
+
+        // Helper to get excluded set for a combo type
+        const getExcludedSet = (allowReuseFromSingles) => {
+             const excluded = new Set(matchesInCombos); // Always exclude matches used in other combos
+             if (!allowReuseFromSingles) {
+                 matchesInSingles.forEach(id => excluded.add(id));
+             }
+             return excluded;
+        };
 
         // Pool for combos: Bankers + High Quality Value
         const comboPool = [...classified.bankers, ...classified.values.filter(p => p.probability >= 0.5)];
 
-        const smartDoubles = this._generateCombos(comboPool, 2, CONFIG.limit_smart_doubles, 2.0, 3.5, usedMatchesGlobal);
+        // Smart Doubles
+        const smartDoubles = this._generateCombos(
+            comboPool,
+            2,
+            CONFIG.limit_smart_doubles,
+            2.0,
+            3.5,
+            getExcludedSet(CONFIG.allow_smart_reuse_from_singles),
+            matchesInCombos // Pass tracker to update used matches
+        );
 
         // Mid Combo: 2-3 legs, Aggressive
         const midPool = [...classified.values, ...classified.upside]; // Wider pool
-        const midCombos = this._generateCombos(midPool, 3, CONFIG.limit_mid_combos, 3.0, 6.0, usedMatchesGlobal);
+        const midCombos = this._generateCombos(
+            midPool,
+            3,
+            CONFIG.limit_mid_combos,
+            3.0,
+            6.0,
+            getExcludedSet(CONFIG.allow_mid_reuse_from_singles),
+            matchesInCombos
+        );
 
         // Booster: 3-4 legs, High variance
-        const boosterCombos = this._generateCombos([...classified.values, ...classified.upside], 4, CONFIG.limit_booster, 7.0, 20.0, usedMatchesGlobal);
+        const boosterCombos = this._generateCombos(
+            [...classified.values, ...classified.upside],
+            4,
+            CONFIG.limit_booster,
+            7.0,
+            20.0,
+            getExcludedSet(CONFIG.allow_booster_reuse_from_singles),
+            matchesInCombos
+        );
 
         return {
             date,
@@ -309,25 +359,25 @@ class DailyCurator {
         return selected;
     }
 
-    _generateCombos(pool, legCount, comboLimit, minOdds, maxOdds, usedMatchesGlobal) {
+    _generateCombos(pool, legCount, comboLimit, minOdds, maxOdds, excludedMatches, globalUsedTracker = null) {
         const combos = [];
 
         // Sort pool best first
         pool.sort((a, b) => b.rank_score - a.rank_score);
 
+        // Track used matches within this specific combo set to ensure internal uniqueness
+        // (in addition to the passed excluded matches)
+        const usedInThisSet = new Set(excludedMatches);
+
         // Simple greedy backtracking-like loop
         // We iterate through potential starter legs
         for (let i = 0; i < pool.length; i++) {
             if (combos.length >= comboLimit) break;
-            if (usedMatchesGlobal.has(pool[i].match_id)) continue;
+            if (usedInThisSet.has(pool[i].match_id)) continue;
 
             // Try to build a combo starting with pool[i]
             // We need to pick (legCount - 1) more items from pool[i+1...end]
             // verifying uniqueness and total odds constraints.
-
-            // We use a helper to recursively find legs to support retry/backtracking logic
-            // if a specific path fails odds constraints.
-            // For legCount 2, 3, 4 this is cheap enough.
 
             const result = this._findComboRecursive(
                 pool,
@@ -337,7 +387,7 @@ class DailyCurator {
                 legCount,
                 minOdds,
                 maxOdds,
-                usedMatchesGlobal
+                usedInThisSet
             );
 
             if (result) {
@@ -347,14 +397,18 @@ class DailyCurator {
                     total_odds: parseFloat(result.odds.toFixed(2))
                 });
 
-                // Mark used
-                result.combo.forEach(p => usedMatchesGlobal.add(p.match_id));
+                // Mark used for subsequent combos in this list
+                result.combo.forEach(p => {
+                    usedInThisSet.add(p.match_id);
+                    // Also update the global tracker if provided
+                    if (globalUsedTracker) globalUsedTracker.add(p.match_id);
+                });
             }
         }
         return combos;
     }
 
-    _findComboRecursive(pool, startIndex, currentCombo, currentOdds, targetLegs, minOdds, maxOdds, usedMatchesGlobal) {
+    _findComboRecursive(pool, startIndex, currentCombo, currentOdds, targetLegs, minOdds, maxOdds, excludedMatches) {
         // Base case: Full combo
         if (currentCombo.length === targetLegs) {
             if (currentOdds >= minOdds && currentOdds <= maxOdds) {
@@ -368,7 +422,7 @@ class DailyCurator {
             const leg = pool[j];
 
             // Skip used
-            if (usedMatchesGlobal.has(leg.match_id)) continue;
+            if (excludedMatches.has(leg.match_id)) continue;
 
             // Skip matches already in current incomplete combo (shouldn't happen with sorted index, but safe)
             const alreadyInCombo = currentCombo.some(p => p.match_id === leg.match_id);
@@ -389,7 +443,7 @@ class DailyCurator {
                 targetLegs,
                 minOdds,
                 maxOdds,
-                usedMatchesGlobal
+                excludedMatches
             );
 
             if (result) return result; // Found valid completion
@@ -454,7 +508,8 @@ class DailyCurator {
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
                     const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
-                    lines.push(`  • ${this._escapeMarkdown(ht)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
                 });
             });
             lines.push("");
@@ -467,7 +522,8 @@ class DailyCurator {
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
                     const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
-                    lines.push(`  • ${this._escapeMarkdown(ht)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
                 });
             });
             lines.push("");
@@ -502,10 +558,15 @@ class DailyCurator {
 if (typeof items !== 'undefined' && Array.isArray(items)) {
     // n8n Environment
     try {
-        const input = items.map(i => i.json); // Assuming flattened array passed as items
-        // NOTE: n8n usually passes 1 item per row if flattened.
-        // We need the WHOLE array to group.
-        // If n8n runs this node "Once for all items", 'items' is the array.
+        let input = [];
+        // Robust input detection handling various n8n structures
+        if (items.length === 1 && Array.isArray(items[0].json)) {
+             input = items[0].json;
+        } else if (items.length > 0 && items[0].json && Array.isArray(items[0].json.data)) {
+             input = items[0].json.data;
+        } else {
+             input = items.map(i => i.json);
+        }
 
         // Check for debug mode input
         // e.g. items[0].json.debug_mode
