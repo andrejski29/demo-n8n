@@ -13,6 +13,9 @@ const CONFIG = {
     min_prob_value: 0.30,
     min_prob_core: 0.55,
 
+    // Banker safety
+    min_edge_banker: -0.05, // Allow slight vig, but prevent deep negative edge
+
     // Limits per section
     limit_core: 5,
     limit_value: 8,
@@ -21,7 +24,10 @@ const CONFIG = {
     // Combo Limits
     limit_smart_doubles: 2, // Max number of doubles to generate
     limit_mid_combos: 1,
-    limit_booster: 1
+    limit_booster: 1,
+
+    // Overlap Rules
+    allow_combo_reuse_from_singles: false
 };
 
 // ============================================================================
@@ -84,7 +90,8 @@ class DailyCurator {
                     this.matches.set(row.match_id, {
                         summary: {
                             match_id: row.match_id,
-                            date_iso: row.date_iso || new Date().toISOString(), // Fallback
+                            date_unix: row.date_unix,
+                            date_iso: row.date_iso || "UNKNOWN_DATE", // Better Fallback
                             home_team: row.home_team || 'Unknown',
                             away_team: row.away_team || 'Unknown'
                         },
@@ -94,6 +101,17 @@ class DailyCurator {
                 this.matches.get(row.match_id).picks.push(row);
             }
         });
+    }
+
+    _normalizePick(p) {
+        // Force numeric types for critical fields
+        p.edge = Number(p.edge) || 0;
+        p.probability = Number(p.probability) || 0;
+        p.best_odds = Number(p.best_odds) || 0;
+        p.rank_score = Number(p.rank_score) || 0;
+
+        // Clamp probability
+        p.probability = Math.max(0, Math.min(1, p.probability));
     }
 
     _groupByDay() {
@@ -138,6 +156,8 @@ class DailyCurator {
             // Add reference to match summary in pick for easier access
             m.picks.forEach(p => {
                 p._summary = m.summary;
+                // Normalize Data Types immediately
+                this._normalizePick(p);
                 allPicks.push(p);
             });
         });
@@ -153,24 +173,33 @@ class DailyCurator {
             const isEdgePositive = p.edge > 0;
             const prob = p.probability;
 
-            // Exclusive Classification: BANKER > UPSIDE > VALUE
+            // Exclusive Classification: BANKER > VALUE (High Prob) > UPSIDE > VALUE (Low Prob)
             // This prevents tag overwriting and duplicate counting
 
             // 1. BANKER (High Confidence)
-            if (prob >= CONFIG.min_prob_banker) {
+            // Check edge safety net
+            if (prob >= CONFIG.min_prob_banker && p.edge >= CONFIG.min_edge_banker) {
                 p._tags_internal = ["BANKER"];
                 classified.bankers.push(p);
                 return; // Stop
             }
 
-            // 2. UPSIDE (High Odds, Good Edge)
+            // 2. HIGH PROBABILITY VALUE (Core Candidates)
+            // Catch these BEFORE Upside to ensure they are available for Core selection
+            if (isEdgePositive && prob >= 0.50) {
+                 p._tags_internal = ["VALUE"];
+                 classified.values.push(p);
+                 return; // Stop
+            }
+
+            // 3. UPSIDE (High Odds, Good Edge, Lower Prob)
             if (isEdgePositive && p.best_odds >= 3.0) {
                 p._tags_internal = ["UPSIDE"];
                 classified.upside.push(p);
                 return; // Stop
             }
 
-            // 3. VALUE (Solid Edge)
+            // 4. VALUE (Remaining valid value picks)
             if (isEdgePositive && prob >= CONFIG.min_prob_value) {
                 p._tags_internal = ["VALUE"];
                 classified.values.push(p);
@@ -338,9 +367,9 @@ class DailyCurator {
     _formatTelegram(digest) {
         const lines = [];
         const s = digest.summary_counts;
-        const dateStr = new Date(digest.date).toDateString();
+        const dateStr = digest.date; // Use the grouped date directly (YYYY-MM-DD)
 
-        lines.push(`📅 **Daily Analysis: ${dateStr}**`);
+        lines.push(`📅 **Daily Analysis: ${this._escapeMarkdown(dateStr)}**`);
         lines.push(`📊 **Summary**`);
         lines.push(`• 🛡️ Core: ${s.core}`);
         lines.push(`• 💎 Value: ${s.value}`);
@@ -376,7 +405,9 @@ class DailyCurator {
                 lines.push(`\n**Double #${idx+1} @ ${c.total_odds}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
-                    lines.push(`  • ${leg.home_team} vs ${leg.away_team}: ${sel} (${leg.market})`);
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
                 });
             });
             lines.push("");
@@ -388,7 +419,8 @@ class DailyCurator {
                 lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
-                    lines.push(`  • ${leg.home_team}: ${sel} (${leg.market})`);
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
                 });
             });
             lines.push("");
@@ -400,7 +432,8 @@ class DailyCurator {
                 lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
-                    lines.push(`  • ${leg.home_team}: ${sel} (${leg.market})`);
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
                 });
             });
             lines.push("");
@@ -410,12 +443,22 @@ class DailyCurator {
     }
 
     _fmtPick(p) {
-        // "Match — Market (Line) @ odds | prob | edge | bookmaker"
+        // "Match — Market (Line) @ odds | prob | edge"
         const marketStr = p.line ? `${p.market} (${p.selection} ${p.line})` : `${p.market} (${p.selection})`;
         const probPct = Math.round(p.probability * 100) + "%";
         const edgePct = (p.edge * 100).toFixed(1) + "%";
 
-        return `• ${p.home_team} vs ${p.away_team}\n  👉 ${marketStr} @ ${p.best_odds}\n  📊 ${probPct} | Edge: ${edgePct} | 🏦 ${p.bookmaker || 'N/A'}`;
+        const ht = p.home_team || (p._summary ? p._summary.home_team : 'Unknown');
+        const at = p.away_team || (p._summary ? p._summary.away_team : 'Unknown');
+
+        // Removed Bookmaker as per requirement
+        return `• ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}\n  👉 ${this._escapeMarkdown(marketStr)} @ ${p.best_odds}\n  📊 ${probPct} | Edge: ${this._escapeMarkdown(edgePct)}`;
+    }
+
+    _escapeMarkdown(text) {
+        if (typeof text !== 'string') return text;
+        // Escape special chars for Telegram MarkdownV2: _ * [ ] ( ) ~ > # + - = | { } . !
+        return text.replace(/[_*[\]()~>#+\-=|{}.!]/g, '\\$&');
     }
 }
 
