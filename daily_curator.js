@@ -223,13 +223,10 @@ class DailyCurator {
         // 3. Combos
         const usedMatchesGlobal = new Set();
 
-        // Exclude matches already used in Single Sections to maximize variety?
-        // User requested: "Prevent match re-use across multiple combos".
-        // Didn't explicitly forbid re-using Singles in Combos, but typically it's better to avoid overlap.
-        // Let's seed the global used list with matches from Singles?
-        // Actually, keeping them separate is often fine (Single bet + part of a combo).
-        // BUT, strictly enforcing "1 pick per match per section" implies we shouldn't reuse.
-        // For strictly unique combos, we track usage across all combos generated below.
+        // Exclude matches already used in Single Sections if configured
+        if (CONFIG.allow_combo_reuse_from_singles === false) {
+            [...corePicks, ...valuePicks, ...upsidePicks].forEach(p => usedMatchesGlobal.add(p.match_id));
+        }
 
         // Pool for combos: Bankers + High Quality Value
         const comboPool = [...classified.bankers, ...classified.values.filter(p => p.probability >= 0.5)];
@@ -313,55 +310,92 @@ class DailyCurator {
     }
 
     _generateCombos(pool, legCount, comboLimit, minOdds, maxOdds, usedMatchesGlobal) {
-        // Greedy approach with Global Exclusion
         const combos = [];
 
         // Sort pool best first
         pool.sort((a, b) => b.rank_score - a.rank_score);
 
+        // Simple greedy backtracking-like loop
+        // We iterate through potential starter legs
         for (let i = 0; i < pool.length; i++) {
             if (combos.length >= comboLimit) break;
-
-            // Check if start leg is already used globally
             if (usedMatchesGlobal.has(pool[i].match_id)) continue;
 
-            // Start a combo
-            const currentCombo = [pool[i]];
-            const currentMatchIds = new Set([pool[i].match_id]);
-            let currentOdds = pool[i].best_odds;
+            // Try to build a combo starting with pool[i]
+            // We need to pick (legCount - 1) more items from pool[i+1...end]
+            // verifying uniqueness and total odds constraints.
 
-            // Try to find legs
-            for (let j = i + 1; j < pool.length; j++) {
-                const leg = pool[j];
+            // We use a helper to recursively find legs to support retry/backtracking logic
+            // if a specific path fails odds constraints.
+            // For legCount 2, 3, 4 this is cheap enough.
 
-                // Skip if match used in this combo OR globally
-                if (currentMatchIds.has(leg.match_id) || usedMatchesGlobal.has(leg.match_id)) continue;
+            const result = this._findComboRecursive(
+                pool,
+                i + 1,
+                [pool[i]],
+                pool[i].best_odds,
+                legCount,
+                minOdds,
+                maxOdds,
+                usedMatchesGlobal
+            );
 
-                // Add
-                currentCombo.push(leg);
-                currentMatchIds.add(leg.match_id);
-                currentOdds *= leg.best_odds;
+            if (result) {
+                combos.push({
+                    type: legCount + "-Fold",
+                    legs: result.combo,
+                    total_odds: parseFloat(result.odds.toFixed(2))
+                });
 
-                if (currentCombo.length === legCount) {
-                    // Check total odds constraints
-                    if (currentOdds >= minOdds && currentOdds <= maxOdds) {
-                        combos.push({
-                            type: legCount + "-Fold",
-                            legs: currentCombo,
-                            total_odds: parseFloat(currentOdds.toFixed(2))
-                        });
-
-                        // Mark all matches in this combo as used globally
-                        currentMatchIds.forEach(id => usedMatchesGlobal.add(id));
-
-                        // Move outer loop forward to avoid checking the same starting leg again
-                        // (though the usedMatchesGlobal check at start of loop handles it)
-                    }
-                    break; // Move to next potential combo
-                }
+                // Mark used
+                result.combo.forEach(p => usedMatchesGlobal.add(p.match_id));
             }
         }
         return combos;
+    }
+
+    _findComboRecursive(pool, startIndex, currentCombo, currentOdds, targetLegs, minOdds, maxOdds, usedMatchesGlobal) {
+        // Base case: Full combo
+        if (currentCombo.length === targetLegs) {
+            if (currentOdds >= minOdds && currentOdds <= maxOdds) {
+                return { combo: currentCombo, odds: currentOdds };
+            }
+            return null; // Odds constraint failed
+        }
+
+        // Search for next leg
+        for (let j = startIndex; j < pool.length; j++) {
+            const leg = pool[j];
+
+            // Skip used
+            if (usedMatchesGlobal.has(leg.match_id)) continue;
+
+            // Skip matches already in current incomplete combo (shouldn't happen with sorted index, but safe)
+            const alreadyInCombo = currentCombo.some(p => p.match_id === leg.match_id);
+            if (alreadyInCombo) continue;
+
+            // Optimistic prune? (e.g. if currentOdds * leg.odds > maxOdds, we might skip if sorted by odds... but we sort by rank)
+            // Just recurse
+            const newOdds = currentOdds * leg.best_odds;
+
+            // Prune if odds definitely too high (assuming odds >= 1.0)
+            if (newOdds > maxOdds) continue;
+
+            const result = this._findComboRecursive(
+                pool,
+                j + 1,
+                [...currentCombo, leg],
+                newOdds,
+                targetLegs,
+                minOdds,
+                maxOdds,
+                usedMatchesGlobal
+            );
+
+            if (result) return result; // Found valid completion
+        }
+
+        return null; // No valid completion found from this state
     }
 
     _formatTelegram(digest) {
