@@ -67,15 +67,23 @@ class DailyCurator {
             }
         });
 
-        // Second pass: Attach picks
+        // Second pass: Attach picks (with Lazy Hydration)
         this.data.forEach(row => {
             if (row.type === 'pick') {
-                if (this.matches.has(row.match_id)) {
-                    this.matches.get(row.match_id).picks.push(row);
-                } else {
-                    // Orphan pick (shouldn't happen if data integrity is good)
-                    // Auto-create simplified summary if needed? Skipping for now.
+                if (!this.matches.has(row.match_id)) {
+                    // Lazy Hydration: Create container if summary missing
+                    // We assume the pick has enough metadata (date, teams) to survive
+                    this.matches.set(row.match_id, {
+                        summary: {
+                            match_id: row.match_id,
+                            date_iso: row.date_iso || new Date().toISOString(), // Fallback
+                            home_team: row.home_team || 'Unknown',
+                            away_team: row.away_team || 'Unknown'
+                        },
+                        picks: []
+                    });
                 }
+                this.matches.get(row.match_id).picks.push(row);
             }
         });
     }
@@ -83,7 +91,13 @@ class DailyCurator {
     _groupByDay() {
         const groups = {};
         for (const match of this.matches.values()) {
-            const d = match.summary.date_iso;
+            // Robust date grouping (YYYY-MM-DD)
+            let d = match.summary.date_iso;
+            if (d && d.includes('T')) {
+                d = d.split('T')[0];
+            }
+            if (!d) d = "UNKNOWN_DATE";
+
             if (!groups[d]) groups[d] = [];
             groups[d].push(match);
         }

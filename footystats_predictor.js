@@ -104,10 +104,36 @@ class DataParser {
              this.tempLastX = this.tempLastX || [];
              this.tempLastX.push(dataPayload);
         }
+
+        // Check for Pre-Merged Format (results.txt structure)
+        if (dataPayload.match_id && dataPayload.home && dataPayload.away) {
+            this.mode = "pre_merged";
+            this.preMergedData = dataPayload;
+
+            // Construct pseudo Match Details
+            this.matchDetails = {
+                id: dataPayload.match_id,
+                home_name: dataPayload.home_team,
+                away_name: dataPayload.away_team,
+                date_unix: (dataPayload.response && dataPayload.response[0] && dataPayload.response[0].fixture) ? dataPayload.response[0].fixture.timestamp : null,
+                competition_id: (dataPayload.response && dataPayload.response[0] && dataPayload.response[0].league) ? dataPayload.response[0].league.id : null,
+                odds_comparison: (dataPayload.response && dataPayload.response[0]) ? dataPayload.response[0].bookmakers : null,
+                // If pre-processed odds exist at top level
+                _bookmaker_odds: dataPayload.bookmaker_odds
+            };
+            return;
+        }
     });
 
     if (!this.matchDetails) {
         throw new Error("Match Details not found in input data.");
+    }
+
+    // If Pre-Merged, stop here (stats are already attached)
+    if (this.mode === "pre_merged") {
+        this.homeStatsRows = {};
+        this.awayStatsRows = {};
+        return;
     }
 
     // Now resolve Home/Away stats based on IDs
@@ -225,9 +251,31 @@ class FeatureEngineer {
     }
 
     calculate() {
-        // Calculate Weighted Stats for Home and Away
-        const homeStats = this._blendStats(this.data.homeStatsRows, "home");
-        const awayStats = this._blendStats(this.data.awayStatsRows, "away");
+        let homeStats, awayStats;
+
+        if (this.data.mode === "pre_merged") {
+            // Map Pre-Merged keys to internal Blend keys
+            const h = this.data.preMergedData.home.team_season || {};
+            const a = this.data.preMergedData.away.team_season || {};
+
+            homeStats = {
+                seasonScoredAVG_home: h.goals_for_average_home || 0,
+                seasonConcededAVG_home: h.goals_against_average_home || 0,
+                scoredAVGHT_home: undefined, // Not available in this format
+                concededAVGHT_home: undefined
+            };
+
+            awayStats = {
+                seasonScoredAVG_away: a.goals_for_average_away || 0,
+                seasonConcededAVG_away: a.goals_against_average_away || 0,
+                scoredAVGHT_away: undefined,
+                concededAVGHT_away: undefined
+            };
+        } else {
+            // Calculate Weighted Stats for Home and Away
+            homeStats = this._blendStats(this.data.homeStatsRows, "home");
+            awayStats = this._blendStats(this.data.awayStatsRows, "away");
+        }
 
         // Calculate Lambdas (Expected Goals)
         // Method: Strength Based
@@ -485,11 +533,39 @@ class PoissonEngine {
 // 4. ODDS PROCESSOR & PICK RANKER
 // ============================================================================
 class OddsProcessor {
-    constructor(oddsData) {
+    constructor(oddsData, preProcessed = null) {
         this.odds = oddsData || {}; // odds_comparison object
+        this.preProcessed = preProcessed; // bookmaker_odds object (optional)
     }
 
     getBestOdds(market, selection) {
+        // --- 1. Pre-Processed Path (results.txt format) ---
+        if (this.preProcessed) {
+            // Direct lookup if structure matches
+            // market: "1X2", selection: "1" -> preProcessed["1X2"]["1"]
+            if (this.preProcessed[market] && this.preProcessed[market][selection] !== undefined) {
+                return { odd: parseFloat(this.preProcessed[market][selection]), bookmaker: "Best" };
+            }
+            // Double Chance mapping might differ
+            // FootyStats raw: "Home/Draw", "Home/Away", "Draw/Away"
+            // PreProcessed (from results.txt dump): "Home/Draw": 1.58
+            // Our internal Selection: "1X"
+            if (market === "DoubleChance") {
+                const dcMap = { "1X": "Home/Draw", "12": "Home/Away", "X2": "Draw/Away" };
+                const key = dcMap[selection];
+                if (this.preProcessed[market] && this.preProcessed[market][key]) {
+                    return { odd: parseFloat(this.preProcessed[market][key]), bookmaker: "Best" };
+                }
+            }
+            // DNB
+            // Internal: "1", "2"
+            // PreProcessed: "1", "2" (based on dump) or "Home"/"Away"
+            // Dump says: "DNB_1H": { "1": 2.05, "2": 1.67 }
+            // Wait, does it have "DNB" (FT)? Dump showed "DNB_1H" and "DNB_2H".
+            // Let's assume standard DNB if it exists.
+        }
+
+        // --- 2. Standard Path (Merge.json format) ---
         // Map internal keys to FootyStats keys
         // Example: market="1X2", selection="1" -> "FT Result" -> "Home"
 
@@ -528,6 +604,22 @@ class OddsProcessor {
     }
 
     getMaxOddsForLine(marketCategory, selectionKey) {
+        // selectionKey: "Over 2.5"
+
+        if (this.preProcessed) {
+            // Mapping for OU
+            // marketCategory "Goals Over/Under" -> "OverUnder"
+            // marketCategory "1st Half Goals" -> "OverUnder_1H"
+
+            let ppKey = null;
+            if (marketCategory === "Goals Over/Under") ppKey = "OverUnder";
+            if (marketCategory === "1st Half Goals") ppKey = "OverUnder_1H";
+
+            if (ppKey && this.preProcessed[ppKey] && this.preProcessed[ppKey][selectionKey] !== undefined) {
+                return { odd: parseFloat(this.preProcessed[ppKey][selectionKey]), bookmaker: "Best" };
+            }
+        }
+
         const cat = this.odds[marketCategory];
         if(!cat) return null;
         const bookies = cat[selectionKey];
@@ -709,7 +801,10 @@ function analyzeMatch(inputJson) {
         const probs = poisson.compute();
 
         // 4. Odds & Picks
-        const oddsProc = new OddsProcessor(parser.matchDetails.odds_comparison);
+        const oddsProc = new OddsProcessor(
+            parser.matchDetails.odds_comparison,
+            parser.matchDetails._bookmaker_odds
+        );
         const ranker = new PickRanker(probs, oddsProc);
         const picks = ranker.generate();
 
