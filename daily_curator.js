@@ -490,12 +490,12 @@ class DailyCurator {
         if (digest.sections.smart_doubles.length > 0) {
             lines.push(`🔥 **SMART DOUBLES**`);
             digest.sections.smart_doubles.forEach((c, idx) => {
-                lines.push(`\n**Double #${idx+1} @ ${c.total_odds}**`);
+                lines.push(`\n**Double #${idx+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
                     const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
                     const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
-                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
                 });
             });
             lines.push("");
@@ -504,12 +504,12 @@ class DailyCurator {
         if (digest.sections.mid_combos.length > 0) {
             lines.push(`⚡ **MID COMBO**`);
             digest.sections.mid_combos.forEach((c, idx) => {
-                lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
+                lines.push(`\n**Combo #${idx+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
                     const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
                     const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
-                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
                 });
             });
             lines.push("");
@@ -518,12 +518,12 @@ class DailyCurator {
         if (digest.sections.booster.length > 0) {
             lines.push(`🚀 **BOOSTER**`);
             digest.sections.booster.forEach((c, idx) => {
-                lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
+                lines.push(`\n**Combo #${idx+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
                 c.legs.forEach(leg => {
                     const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
                     const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
                     const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
-                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)})`);
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
                 });
             });
             lines.push("");
