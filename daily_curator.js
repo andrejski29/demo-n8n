@@ -29,9 +29,10 @@ const CONFIG = {
 // ============================================================================
 
 class DailyCurator {
-    constructor(inputData) {
+    constructor(inputData, debugMode = false) {
         this.data = inputData;
         this.matches = new Map(); // id -> { summary, picks[] }
+        this.debugMode = debugMode;
     }
 
     process() {
@@ -47,11 +48,18 @@ class DailyCurator {
             const digest = this._generateDailyDigest(date, matchList);
             const telegramText = this._formatTelegram(digest);
 
-            results.push({
+            const result = {
                 date,
-                digest,
+                summary_counts: digest.summary_counts,
                 telegram_text: telegramText
-            });
+            };
+
+            // Optional: Include full digest only if requested or debug
+            if (this.debugMode) {
+                result.digest = digest;
+            }
+
+            results.push(result);
         }
 
         return results;
@@ -91,12 +99,31 @@ class DailyCurator {
     _groupByDay() {
         const groups = {};
         for (const match of this.matches.values()) {
-            // Robust date grouping (YYYY-MM-DD)
-            let d = match.summary.date_iso;
-            if (d && d.includes('T')) {
-                d = d.split('T')[0];
+            let d = "UNKNOWN_DATE";
+
+            // Priority: unix timestamp with Europe/Paris TZ, fallback to ISO split
+            if (match.summary.date_unix) {
+                try {
+                    // Normalize to Paris Day
+                    const dateObj = new Date(match.summary.date_unix * 1000);
+                    d = new Intl.DateTimeFormat('en-CA', { // en-CA gives YYYY-MM-DD
+                        timeZone: 'Europe/Paris',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    }).format(dateObj);
+                } catch (e) {
+                    // Fallback
+                }
             }
-            if (!d) d = "UNKNOWN_DATE";
+
+            if (d === "UNKNOWN_DATE" && match.summary.date_iso) {
+                if (match.summary.date_iso.includes('T')) {
+                    d = match.summary.date_iso.split('T')[0];
+                } else {
+                    d = match.summary.date_iso;
+                }
+            }
 
             if (!groups[d]) groups[d] = [];
             groups[d].push(match);
@@ -126,26 +153,28 @@ class DailyCurator {
             const isEdgePositive = p.edge > 0;
             const prob = p.probability;
 
-            // BANKER: Very high confidence, regardless of edge (mostly for combos)
+            // Exclusive Classification: BANKER > UPSIDE > VALUE
+            // This prevents tag overwriting and duplicate counting
+
+            // 1. BANKER (High Confidence)
             if (prob >= CONFIG.min_prob_banker) {
                 p._tags_internal = ["BANKER"];
                 classified.bankers.push(p);
+                return; // Stop
             }
 
-            // VALUE: Positive edge required
-            if (isEdgePositive && prob >= CONFIG.min_prob_value) {
-                // If it's also a Banker, it's a "Value Banker" (Gold standard)
-                if (prob < CONFIG.min_prob_banker) {
-                    p._tags_internal = ["VALUE"];
-                    classified.values.push(p);
-                }
-            }
-
-            // UPSIDE: High odds (Prob < 0.45 usually implied by odds > 2.2), Positive Edge
-            // Simple rule: Edge > 0 and Odds > 3.0
+            // 2. UPSIDE (High Odds, Good Edge)
             if (isEdgePositive && p.best_odds >= 3.0) {
                 p._tags_internal = ["UPSIDE"];
                 classified.upside.push(p);
+                return; // Stop
+            }
+
+            // 3. VALUE (Solid Edge)
+            if (isEdgePositive && prob >= CONFIG.min_prob_value) {
+                p._tags_internal = ["VALUE"];
+                classified.values.push(p);
+                return; // Stop
             }
         });
 
@@ -163,19 +192,27 @@ class DailyCurator {
         const upsidePicks = this._selectUpside(classified, corePicks, valuePicks);
 
         // 3. Combos
+        const usedMatchesGlobal = new Set();
+
+        // Exclude matches already used in Single Sections to maximize variety?
+        // User requested: "Prevent match re-use across multiple combos".
+        // Didn't explicitly forbid re-using Singles in Combos, but typically it's better to avoid overlap.
+        // Let's seed the global used list with matches from Singles?
+        // Actually, keeping them separate is often fine (Single bet + part of a combo).
+        // BUT, strictly enforcing "1 pick per match per section" implies we shouldn't reuse.
+        // For strictly unique combos, we track usage across all combos generated below.
+
         // Pool for combos: Bankers + High Quality Value
         const comboPool = [...classified.bankers, ...classified.values.filter(p => p.probability >= 0.5)];
-        // Remove duplicates/conflicts?
-        // Actually, we just need to ensure unique matches within a combo.
 
-        const smartDoubles = this._generateCombos(comboPool, 2, CONFIG.limit_smart_doubles, 2.0, 3.5);
+        const smartDoubles = this._generateCombos(comboPool, 2, CONFIG.limit_smart_doubles, 2.0, 3.5, usedMatchesGlobal);
 
         // Mid Combo: 2-3 legs, Aggressive
         const midPool = [...classified.values, ...classified.upside]; // Wider pool
-        const midCombos = this._generateCombos(midPool, 3, CONFIG.limit_mid_combos, 3.0, 6.0);
+        const midCombos = this._generateCombos(midPool, 3, CONFIG.limit_mid_combos, 3.0, 6.0, usedMatchesGlobal);
 
         // Booster: 3-4 legs, High variance
-        const boosterCombos = this._generateCombos([...classified.values, ...classified.upside], 4, CONFIG.limit_booster, 7.0, 20.0);
+        const boosterCombos = this._generateCombos([...classified.values, ...classified.upside], 4, CONFIG.limit_booster, 7.0, 20.0, usedMatchesGlobal);
 
         return {
             date,
@@ -246,20 +283,18 @@ class DailyCurator {
         return selected;
     }
 
-    _generateCombos(pool, legCount, comboLimit, minOdds, maxOdds) {
-        // Simple greedy approach for v1:
-        // Sort pool by rank score.
-        // Try to form combos.
-
-        // We want non-overlapping combos if possible.
+    _generateCombos(pool, legCount, comboLimit, minOdds, maxOdds, usedMatchesGlobal) {
+        // Greedy approach with Global Exclusion
         const combos = [];
-        const usedMatchesGlobal = new Set();
 
         // Sort pool best first
         pool.sort((a, b) => b.rank_score - a.rank_score);
 
         for (let i = 0; i < pool.length; i++) {
             if (combos.length >= comboLimit) break;
+
+            // Check if start leg is already used globally
+            if (usedMatchesGlobal.has(pool[i].match_id)) continue;
 
             // Start a combo
             const currentCombo = [pool[i]];
@@ -270,7 +305,8 @@ class DailyCurator {
             for (let j = i + 1; j < pool.length; j++) {
                 const leg = pool[j];
 
-                if (currentMatchIds.has(leg.match_id)) continue; // Skip same match
+                // Skip if match used in this combo OR globally
+                if (currentMatchIds.has(leg.match_id) || usedMatchesGlobal.has(leg.match_id)) continue;
 
                 // Add
                 currentCombo.push(leg);
@@ -286,13 +322,13 @@ class DailyCurator {
                             total_odds: parseFloat(currentOdds.toFixed(2))
                         });
 
-                        // Mark matches as used globally?
-                        // User said: "Duplicates not allowed: one pick per match inside a combo."
-                        // Doesn't strictly forbid reusing a match in a *different* combo, but better variety if we don't.
-                        // Let's iterate to find distinct combos.
-                        i = j; // Skip main loop
+                        // Mark all matches in this combo as used globally
+                        currentMatchIds.forEach(id => usedMatchesGlobal.add(id));
+
+                        // Move outer loop forward to avoid checking the same starting leg again
+                        // (though the usedMatchesGlobal check at start of loop handles it)
                     }
-                    break; // Move to next combo
+                    break; // Move to next potential combo
                 }
             }
         }
@@ -358,6 +394,18 @@ class DailyCurator {
             lines.push("");
         }
 
+        if (digest.sections.booster.length > 0) {
+            lines.push(`🚀 **BOOSTER**`);
+            digest.sections.booster.forEach((c, idx) => {
+                lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    lines.push(`  • ${leg.home_team}: ${sel} (${leg.market})`);
+                });
+            });
+            lines.push("");
+        }
+
         return lines.join("\n");
     }
 
@@ -382,7 +430,11 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
         // We need the WHOLE array to group.
         // If n8n runs this node "Once for all items", 'items' is the array.
 
-        const curator = new DailyCurator(input);
+        // Check for debug mode input
+        // e.g. items[0].json.debug_mode
+        const debug = input[0] && input[0].debug_mode === true;
+
+        const curator = new DailyCurator(input, debug);
         const results = curator.process();
 
         return results.map(r => ({ json: r }));
