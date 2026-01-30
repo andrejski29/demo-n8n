@@ -338,7 +338,10 @@ class DailyCurator {
             lines.push(`🔥 **SMART DOUBLES**`);
             digest.sections.smart_doubles.forEach((c, idx) => {
                 lines.push(`\n**Double #${idx+1} @ ${c.total_odds}**`);
-                c.legs.forEach(leg => lines.push(`  • ${leg.home_team} vs ${leg.away_team}: ${leg.selection} (${leg.market})`));
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    lines.push(`  • ${leg.home_team} vs ${leg.away_team}: ${sel} (${leg.market})`);
+                });
             });
             lines.push("");
         }
@@ -347,7 +350,10 @@ class DailyCurator {
             lines.push(`⚡ **MID COMBO**`);
             digest.sections.mid_combos.forEach((c, idx) => {
                 lines.push(`\n**Combo #${idx+1} @ ${c.total_odds}**`);
-                c.legs.forEach(leg => lines.push(`  • ${leg.home_team}: ${leg.selection} (${leg.market})`));
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    lines.push(`  • ${leg.home_team}: ${sel} (${leg.market})`);
+                });
             });
             lines.push("");
         }
