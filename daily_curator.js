@@ -70,6 +70,12 @@ class DailyCurator {
             results.push(result);
         }
 
+        // 4. Generate Global Combo Board
+        const globalBoard = this._generateGlobalBoard();
+        if (globalBoard) {
+            results.push(globalBoard);
+        }
+
         return results;
     }
 
@@ -165,20 +171,7 @@ class DailyCurator {
         return groups;
     }
 
-    _generateDailyDigest(date, matchList) {
-        // Pool of all valid picks for the day
-        let allPicks = [];
-        matchList.forEach(m => {
-            // Add reference to match summary in pick for easier access
-            m.picks.forEach(p => {
-                p._summary = m.summary;
-                // Normalize Data Types immediately
-                this._normalizePick(p);
-                allPicks.push(p);
-            });
-        });
-
-        // 1. Classification
+    _classifyPicks(allPicks) {
         const classified = {
             bankers: [],
             values: [], // Edge > 0, Prob >= 0.30
@@ -228,6 +221,25 @@ class DailyCurator {
         classified.bankers.sort(sortByRank);
         classified.values.sort(sortByRank);
         classified.upside.sort(sortByRank);
+
+        return classified;
+    }
+
+    _generateDailyDigest(date, matchList) {
+        // Pool of all valid picks for the day
+        let allPicks = [];
+        matchList.forEach(m => {
+            // Add reference to match summary in pick for easier access
+            m.picks.forEach(p => {
+                p._summary = m.summary;
+                // Normalize Data Types immediately
+                this._normalizePick(p);
+                allPicks.push(p);
+            });
+        });
+
+        // 1. Classification
+        const classified = this._classifyPicks(allPicks);
 
         // 2. Selection (Deduplicating Matches per section)
         // We track used match_ids per section to ensure 1 pick per match
@@ -309,6 +321,165 @@ class DailyCurator {
                 booster: boosterCombos
             }
         };
+    }
+
+    _generateGlobalBoard() {
+        // Collect ALL picks from ALL matches
+        const allPicks = [];
+        for (const match of this.matches.values()) {
+            match.picks.forEach(p => {
+                p._summary = match.summary;
+                this._normalizePick(p);
+                allPicks.push(p);
+            });
+        }
+
+        // Classify global pool
+        const classified = this._classifyPicks(allPicks);
+
+        // Define Pools
+        // SAFE: Bankers + High Prob Value
+        const safePool = [...classified.bankers, ...classified.values.filter(p => p.probability >= 0.5)];
+        // BALANCED: Values + Upside
+        const balancedPool = [...classified.values, ...classified.upside];
+        // BOOSTER: Values + Upside (Same pool, just different target)
+        const boosterPool = [...classified.values, ...classified.upside];
+
+        // Track used matches for global board uniqueness
+        const boardUsedMatches = new Set();
+
+        // 1. SAFE COMBOS
+        // Target: 2.0 - 3.0 Odds. Prefer 2 legs. Limit ~3
+        const safeCombos = [];
+        const SAFE_LIMIT = 3;
+
+        // Step 1: Try 2 legs
+        const safeDoubles = this._generateCombos(
+            safePool, 2, SAFE_LIMIT, 2.0, 3.0, boardUsedMatches, boardUsedMatches
+        );
+        safeCombos.push(...safeDoubles);
+
+        // Step 2: Fill with 3 legs if needed
+        if (safeCombos.length < SAFE_LIMIT) {
+            const needed = SAFE_LIMIT - safeCombos.length;
+            const safeTriples = this._generateCombos(
+                safePool, 3, needed, 2.0, 3.0, boardUsedMatches, boardUsedMatches
+            );
+            safeCombos.push(...safeTriples);
+        }
+
+        // 2. BALANCED COMBOS
+        // Target: 3.0 - 5.0 Odds. Prefer 2 legs. Limit ~3
+        const balancedCombos = [];
+        const BALANCED_LIMIT = 3;
+
+        // Step 1: Try 2 legs
+        const balancedDoubles = this._generateCombos(
+            balancedPool, 2, BALANCED_LIMIT, 3.0, 5.0, boardUsedMatches, boardUsedMatches
+        );
+        balancedCombos.push(...balancedDoubles);
+
+        // Step 2: Fill with 3 legs if needed
+        if (balancedCombos.length < BALANCED_LIMIT) {
+            const needed = BALANCED_LIMIT - balancedCombos.length;
+            const balancedTriples = this._generateCombos(
+                balancedPool, 3, needed, 3.0, 5.0, boardUsedMatches, boardUsedMatches
+            );
+            balancedCombos.push(...balancedTriples);
+        }
+
+        // 3. BOOSTER COMBO
+        // Target: 8.0+. Prefer 3 legs. Limit ~2
+        const boosterCombos = [];
+        const BOOSTER_LIMIT = 2;
+
+        // Step 1: Try 3 legs
+        const boosterTriples = this._generateCombos(
+            boosterPool, 3, BOOSTER_LIMIT, 8.0, 25.0, boardUsedMatches, boardUsedMatches
+        );
+        boosterCombos.push(...boosterTriples);
+
+        // Step 2: Fill with 4 legs if needed
+        if (boosterCombos.length < BOOSTER_LIMIT) {
+             const needed = BOOSTER_LIMIT - boosterCombos.length;
+             const boosterQuads = this._generateCombos(
+                 boosterPool, 4, needed, 8.0, 30.0, boardUsedMatches, boardUsedMatches
+             );
+             boosterCombos.push(...boosterQuads);
+        }
+
+        const boardData = {
+            safe: safeCombos,
+            balanced: balancedCombos,
+            booster: boosterCombos
+        };
+
+        return {
+            type: 'GLOBAL_BOARD',
+            board_counts: {
+                safe: safeCombos.length,
+                balanced: balancedCombos.length,
+                booster: boosterCombos.length
+            },
+            combo_board: boardData, // Structured object
+            combo_board_text: this._formatBoardTelegram(boardData)
+        };
+    }
+
+    _formatBoardTelegram(boardData) {
+        const lines = [];
+
+        lines.push(`🌍 **GLOBAL COMBO BOARD**`);
+        lines.push(`*Cross-day combinations | Max Diversity*`);
+        lines.push("");
+
+        // SAFE
+        if (boardData.safe.length > 0) {
+            lines.push(`🛡️ **SAFE ZONE** (2.0 - 3.0)`);
+            boardData.safe.forEach((c, i) => {
+                lines.push(`\n**Option ${i+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    // Add individual leg odds
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
+                });
+            });
+            lines.push("");
+        }
+
+        // BALANCED
+        if (boardData.balanced.length > 0) {
+             lines.push(`⚖️ **BALANCED ZONE** (3.0 - 5.0)`);
+             boardData.balanced.forEach((c, i) => {
+                lines.push(`\n**Option ${i+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
+                });
+            });
+            lines.push("");
+        }
+
+        // BOOSTER
+        if (boardData.booster.length > 0) {
+            lines.push(`🎢 **BOOSTER ZONE** (8.0+)`);
+            boardData.booster.forEach((c, i) => {
+                lines.push(`\n**Option ${i+1} @ ${this._escapeMarkdown(c.total_odds.toFixed(2))}**`);
+                c.legs.forEach(leg => {
+                    const sel = leg.line ? `${leg.selection} ${leg.line}` : leg.selection;
+                    const ht = leg.home_team || (leg._summary ? leg._summary.home_team : 'Unknown');
+                    const at = leg.away_team || (leg._summary ? leg._summary.away_team : 'Unknown');
+                    lines.push(`  • ${this._escapeMarkdown(ht)} vs ${this._escapeMarkdown(at)}: ${this._escapeMarkdown(sel)} (${this._escapeMarkdown(leg.market)}) @ ${this._escapeMarkdown(leg.best_odds.toString())}`);
+                });
+            });
+            lines.push("");
+        }
+
+        return lines.join("\n");
     }
 
     _selectCore(classified) {
