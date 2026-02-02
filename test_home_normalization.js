@@ -7,18 +7,25 @@ try {
     const n8nData = JSON.parse(rawData);
 
     // 1. Unwrap n8n Structure
-    // n8n output is [ { json: { ... } }, ... ]
-    let apiResponse = n8nData[0].json;
+    // The user provided file is [ { success: true, data: [...] } ]
+    // Standard n8n is [ { json: { ... } } ]
+    // We need to handle both for robust testing.
 
-    // 2. Unwrap FootyStats API Structure
-    // API response is { data: [ teamObj1, teamObj2 ... ], ... }
-    // We want the first team object (usually current season or specific query)
-    let teamObj = null;
-    if (apiResponse.data && Array.isArray(apiResponse.data)) {
-        teamObj = apiResponse.data[0];
-    } else {
-        // Fallback if structure is different
-        teamObj = apiResponse;
+    let inputItem = n8nData[0];
+    let apiResponse = inputItem.json || inputItem;
+
+    // 2. Simulate n8n Wrapper Logic (Partial) or Direct Function Call
+    // We want to test if normalizeHomeTeam handles the un-wrapped object?
+    // actually normalizeHomeTeam expects the TEAM OBJECT.
+    // The unwrapping logic is currently inside the n8n execution block in the file, NOT in the exported function.
+    // So for this test script to work with the exported function, WE must unwrap it here,
+    // mimicking what the n8n block does.
+
+    let teamObj = apiResponse;
+
+    if (teamObj.data && Array.isArray(teamObj.data) && !teamObj.id) {
+        console.log("Detected API Wrapper. Extracting first team...");
+        teamObj = teamObj.data[0];
     }
 
     if (!teamObj || !teamObj.id) {

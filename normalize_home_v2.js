@@ -244,7 +244,17 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
     const results = [];
     for (const item of items) {
         // Handle direct object or n8n wrapped object
-        const inputData = item.json || item;
+        let inputData = item.json || item;
+
+        // UNWRAP API RESPONSE (Handling { success: true, data: [ ... ] })
+        if (inputData && inputData.data && Array.isArray(inputData.data) && !inputData.id) {
+            // If input is the API wrapper, take the first team (Current Season)
+            // Ideally, we might want to filter for the specific season, but usually the first item is the most recent.
+            if (inputData.data.length > 0) {
+                inputData = inputData.data[0];
+            }
+        }
+
         const normalized = normalizeHomeTeam(inputData);
 
         // Only return if valid
