@@ -95,6 +95,10 @@ function _calculateQuality(stats, meta) {
     if (matchesHome >= 4) reliability = 'medium';
     if (matchesHome >= 8) reliability = 'high';
 
+    // Fallback for Recorded counters (use matchesHome if specific data counter is missing but stats exist)
+    const cornersRecorded = stats.cornersRecorded_matches_home || stats.cornerTimingRecorded_matches_home || matchesHome;
+    const cardsRecorded = stats.cardsRecorded_matches_home || stats.cardTimingRecorded_matches_home || matchesHome;
+
     return {
         competition_valid: meta.competition_id > 0,
         season_format: stats.season_format || "Unknown",
@@ -102,8 +106,8 @@ function _calculateQuality(stats, meta) {
         matches_home: matchesHome,
         reliability: {
             goals_home: matchesHome >= 3 ? 'ok' : 'low',
-            corners_home: (matchesHome >= 3 && stats.cornersRecorded_matches_home > 0) ? 'ok' : 'low',
-            cards_home: (matchesHome >= 3 && stats.cardsRecorded_matches_home > 0) ? 'ok' : 'low'
+            corners_home: (matchesHome >= 3 && cornersRecorded > 0) ? 'ok' : 'low',
+            cards_home: (matchesHome >= 3 && cardsRecorded > 0) ? 'ok' : 'low'
         },
         missing_flags: [] // Populate if critical fields are null
     };
@@ -231,8 +235,29 @@ function _safeSum(a, b) {
 }
 
 // ============================================================================
-// EXPORT (N8N / Node)
+// EXECUTION (n8n / Node)
 // ============================================================================
+
+// N8N WRAPPER
+// Checks if 'items' exists (n8n Global) and runs the logic
+if (typeof items !== 'undefined' && Array.isArray(items)) {
+    const results = [];
+    for (const item of items) {
+        // Handle direct object or n8n wrapped object
+        const inputData = item.json || item;
+        const normalized = normalizeHomeTeam(inputData);
+
+        // Only return if valid
+        if (normalized) {
+            results.push({ json: normalized });
+        }
+    }
+    // Return to n8n
+    return results;
+}
+
+// NODE.JS EXPORT
+// For local testing
 if (typeof module !== 'undefined') {
     module.exports = { normalizeHomeTeam };
 }
