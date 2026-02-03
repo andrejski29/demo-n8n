@@ -1,17 +1,6 @@
 [
   {
     "success": true,
-    "pager": {
-      "current_page": 1,
-      "max_page": 3,
-      "results_per_page": 25,
-      "total_results": 61
-    },
-    "metadata": {
-      "request_limit": "1800",
-      "request_remaining": "1798",
-      "request_reset_message": "Request limit is refreshed every hour."
-    },
     "data": [
       {
         "id": 156,
@@ -19,10 +8,23 @@
         "name": "Sunderland",
         "stats": {
           "seasonMatchesPlayed_home": 11,
-          "seasonMatchesPlayed_overall": 23,
           "seasonScoredAVG_home": 1.64,
           "seasonConcededAVG_home": 0.82,
-          "seasonOver25Percentage_home": 45
+          "seasonOver25Percentage_home": 45,
+          "over95CornersPercentage_home": 27,
+          "scored_2hg_avg_home": 1.18,
+          "BTTS_and_win_percentage_home": 27
+        }
+      },
+      {
+        "id": 156,
+        "season": "2024/2025",
+        "name": "Sunderland",
+        "stats": {
+          "seasonMatchesPlayed_home": 23,
+          "seasonScoredAVG_home": 1.30,
+          "seasonConcededAVG_home": 1.30,
+          "seasonOver25Percentage_home": 57
         }
       }
     ]
