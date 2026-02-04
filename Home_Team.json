@@ -12,8 +12,13 @@
           "seasonConcededAVG_home": 0.82,
           "seasonOver25Percentage_home": 45,
           "over95CornersPercentage_home": 27,
-          "scored_2hg_avg_home": 1.18,
-          "BTTS_and_win_percentage_home": 27
+          "corners_fh_over4_percentage_home": 50,
+          "corners_2h_over4_percentage_home": 60
+        },
+        "additional_info": {
+            "cardsTotalAVG_home": 3.5,
+            "formRun_home": "wwldw",
+            "corners_fh_avg_home": 2.5
         }
       },
       {
@@ -21,10 +26,7 @@
         "season": "2024/2025",
         "name": "Sunderland",
         "stats": {
-          "seasonMatchesPlayed_home": 23,
-          "seasonScoredAVG_home": 1.30,
-          "seasonConcededAVG_home": 1.30,
-          "seasonOver25Percentage_home": 57
+          "seasonMatchesPlayed_home": 23
         }
       }
     ]

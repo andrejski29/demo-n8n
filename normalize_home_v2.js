@@ -6,7 +6,7 @@
  * 2. Two-Layer Normalization (Core + Extras Feature Store).
  * 3. Consistent Naming (_mu).
  * 4. Strict 0-1 Percent Normalization (by Key Name).
- * 5. Robust Fallbacks for Missing Keys.
+ * 5. Robust Fallbacks & Quality Flags.
  */
 
 // ============================================================================
@@ -30,17 +30,22 @@ function normalizeHomeTeam(inputData) {
     };
 
     // 2. Process Seasons (Core Stats)
+    // We collect missing fields during processing
     const qualityContext = { missing_fields: [] };
     const currentStats = _processSeason(current, qualityContext);
     const previousStats = previous ? _processSeason(previous, { missing_fields: [] }) : null;
 
-    // 3. Quality & Sample Sizes
-    const quality = _calculateQuality(current.stats || {}, meta, qualityContext.missing_fields);
-
-    // 4. Extras (Rich Features from Current Season)
+    // 3. Extras (Rich Features from Current Season)
+    // We do extras BEFORE quality check to validate monotonicity on the extracted extras
     const extras = _extractExtras(current.stats || {}, current.additional_info || {});
 
-    // 5. Structure Output
+    // 4. Quality, Sample Sizes & Consistency Flags
+    const quality = _calculateQuality(current, meta, currentStats, extras, qualityContext.missing_fields);
+
+    // 5. Form (Parse from additional_info if available)
+    const form = _extractForm(current.additional_info || {});
+
+    // 6. Structure Output
     return {
         team_id: meta.id,
         team_name: meta.name,
@@ -50,10 +55,7 @@ function normalizeHomeTeam(inputData) {
             current: currentStats,
             previous: previousStats
         },
-        form: {
-            last5: null, // Placeholder
-            last10: null // Placeholder
-        },
+        form: form,
         extras: extras
     };
 }
@@ -64,6 +66,7 @@ function normalizeHomeTeam(inputData) {
 
 function _selectSeasons(data) {
     if (!Array.isArray(data)) {
+        // Single object case
         return {
             current: data,
             previous: null,
@@ -120,7 +123,8 @@ function _makeSourceMeta(row, index) {
 // ============================================================================
 
 function _processSeason(teamRaw, context) {
-    const s = teamRaw.stats || {};
+    // FIX: Merge stats + additional_info to catch fallbacks like cards_total_avg
+    const s = { ...teamRaw.stats, ...teamRaw.additional_info };
     const missing = context.missing_fields || [];
 
     const _get = (key, fallback = 0, critical = false) => {
@@ -131,7 +135,7 @@ function _processSeason(teamRaw, context) {
         return _num(s[key]);
     };
 
-    // Percent Helper: Extracts & Normalizes 0-1
+    // Percent Helper
     const _p = (key) => _pct(s, key);
 
     const stats = {
@@ -194,8 +198,6 @@ function _processSeason(teamRaw, context) {
 // ============================================================================
 
 function _extractExtras(s, addInfo) {
-    // Merge stats and additional_info for easier access if needed,
-    // though most keys are in stats.
     const combined = { ...s, ...addInfo };
 
     return {
@@ -262,12 +264,11 @@ function _mapFirstGoal(s) {
 }
 
 function _mapGoalTiming(s) {
-    // Buckets: 0-15, 16-30 ...
     const buckets = ['0_15', '16_30', '31_45', '46_60', '61_75', '76_90'];
     const out = { scored: { home: {}, overall: {} }, conceded: { home: {}, overall: {} } };
 
     buckets.forEach(b => {
-        const keyMid = b.replace('_', '_to_'); // 0_15 -> 0_to_15
+        const keyMid = b.replace('_', '_to_');
         out.scored.home[b] = _num(s[`goals_scored_min_${keyMid}_home`]);
         out.scored.overall[b] = _num(s[`goals_scored_min_${keyMid}`] || s[`goals_scored_min_${keyMid}_overall`]);
 
@@ -330,28 +331,28 @@ function _mapDiscipline(s) {
 }
 
 function _mapCornerHalves(s) {
+    // Dedicated mapping for Corner Halves to standard X.5 labels
+    const mapHalf = (halfPrefix) => {
+        const out = { home: {}, overall: {}, away: {} };
+        ['4', '5', '6'].forEach(line => {
+             const standardLabel = line + '.5'; // 4 -> 4.5
+             const suffix = '_percentage'; // e.g. corners_fh_over4_percentage_home
+
+             out.home[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_home`);
+             out.overall[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_overall`);
+             out.away[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_away`);
+        });
+        return out;
+    };
+
     return {
         fh: {
              avg_home: _num(s.corners_fh_avg_home),
-             ou: _mapThresholds(s, 'corners_fh_over', '_percentage', ['4', '5', '6']) // keys over4, over5... map to 4.5? User said confirm. Let's keep raw num key mapping which defaults to 4->0.4.
-             // User Request: "confirm meaning of over4... likely Over 4.5".
-             // IMPORTANT: In _mapThresholds, '4' -> 0.4. '105' -> 10.5.
-             // If key is 'corners_fh_over4_percentage', the lineKey is '4'.
-             // We want 4.5 probably? Or 4?
-             // FootyStats naming 'over4' usually means > 4 (Integer). i.e. 5+. Equivalent to > 4.5.
-             // BUT my threshold mapper divides by 10.
-             // '4' -> 0.4. This is WRONG for 'over4'.
-             // I need a special handler for single digit integers if they are indeed integers.
-             // However, standard lines like '105' mean 10.5.
-             // Let's assume standard behavior first.
-             // If lineKey is '4', numKey is 4. Label becomes '0.4'.
-             // I will leave it as is for consistency with the parser logic (105->10.5),
-             // but '4' becoming '0.4' is definitely weird.
-             // Let's assume these are special keys.
+             ou: mapHalf('corners_fh')
         },
         sh: {
              avg_home: _num(s.corners_2h_avg_home),
-             ou: _mapThresholds(s, 'corners_2h_over', '_percentage', ['4', '5', '6'])
+             ou: mapHalf('corners_2h')
         }
     };
 }
@@ -360,37 +361,15 @@ function _mapCornerHalves(s) {
 function _mapThresholds(stats, prefix, suffix, lines) {
     const out = { home: {}, overall: {}, away: {} };
     lines.forEach(lineKey => {
-        // Threshold Label Logic:
-        // 105 -> 10.5
-        // 05 -> 0.5
-        // 4 -> 4.0 (If we treat it same way? No, 4 is usually integer line in FS)
-        // If length is 1, it's likely integer line?
-        // User instruction: "105 -> 10.5, 115 -> 11.5".
-        // This implies X5 -> X.5.
-        // If lineKey is '4', '5', '6' (Corners Halves), treating as X.0?
-        // Let's apply /10 rule strictly as requested for '105'.
-        // For '4', it becomes 0.4. That's clearly wrong for corners.
-        // Special case: if lineKey has NO '5' at end? No.
-        // Let's stick to the /10 rule for 2-3 digit codes (05, 15, 105).
-        // For single digits '4', '5', '6', assume they are Integers (4.5?).
-
+        const numKey = parseInt(lineKey, 10);
         let label = lineKey;
-        const num = parseInt(lineKey, 10);
-
-        if (!isNaN(num)) {
+        if (!isNaN(numKey)) {
+            // Standard /10 logic for 2-3 digit codes (05, 105)
             if (lineKey.length >= 2 || lineKey === '05') {
-                 label = (num / 10).toString();
-            } else {
-                 // Single digit like '4' -> keep as '4' or map to '4.5'?
-                 // User said "confirm... likely Over 4.5".
-                 // Let's label it '4.5' for safety? Or just keep '4'.
-                 // Keeping '4' is safer if unsure.
-                 label = num.toString();
+                 label = (numKey / 10).toString();
             }
         }
 
-        // Key construction
-        // Special case for 'corners_fh_over' + '4' + '_percentage' -> corners_fh_over4_percentage
         const fullKeyHome = `${prefix}${lineKey}${suffix}_home`;
         const fullKeyOver = `${prefix}${lineKey}${suffix}_overall`;
         const fullKeyAway = `${prefix}${lineKey}${suffix}_away`;
@@ -403,24 +382,76 @@ function _mapThresholds(stats, prefix, suffix, lines) {
 }
 
 // ============================================================================
+// FORM EXTRACTOR
+// ============================================================================
+function _extractForm(addInfo) {
+    const form = { last5: null, last10: null };
+
+    // Simple point calculator: W=3, D=1, L=0
+    // String looks like "wwlwd" or "dwdll..." (most recent LAST? or FIRST? FootyStats usually recent last in string... wait.
+    // User says: "formRun_ strings* -> compute last5_points"
+    // Usually FootyStats formRun is Left=Oldest, Right=Newest.
+    // e.g. "wwl" -> Win, Win, Loss (Recent).
+
+    const runHome = addInfo.formRun_home || "";
+    if (runHome) {
+        const calcPoints = (str) => {
+            let pts = 0;
+            for (let char of str) {
+                if (char.toLowerCase() === 'w') pts += 3;
+                else if (char.toLowerCase() === 'd') pts += 1;
+            }
+            return pts;
+        };
+
+        // Take last 5 chars
+        const l5 = runHome.slice(-5);
+        form.last5 = calcPoints(l5);
+
+        const l10 = runHome.slice(-10);
+        form.last10 = calcPoints(l10);
+    }
+
+    return form;
+}
+
+// ============================================================================
 // UTILS & QUALITY
 // ============================================================================
 
-function _calculateQuality(stats, meta, missingFields) {
-    const matchesHome = stats.seasonMatchesPlayed_home || 0;
+function _calculateQuality(teamRaw, meta, currentStats, extras, missingFields) {
+    // Use the combined stats from Core processing (or re-merge if needed, but we passed checks)
+    // Actually we need the raw combined for recorded counters
+    const s = { ...teamRaw.stats, ...teamRaw.additional_info };
+
+    const matchesHome = currentStats.matches.home || 0;
 
     // Fallback for Recorded counters
-    const cornersRecorded = stats.cornersRecorded_matches_home || stats.cornerTimingRecorded_matches_home || matchesHome;
-    const cardsRecorded = stats.cardsRecorded_matches_home || stats.cardTimingRecorded_matches_home || matchesHome;
-    const offsidesRecorded = stats.offsidesRecorded_matches_home || matchesHome;
-    const timingRecorded = stats.seasonMatchesPlayedGoalTimingRecorded_home || matchesHome;
+    const cornersRecorded = s.cornersRecorded_matches_home || s.cornerTimingRecorded_matches_home || matchesHome;
+    const cardsRecorded = s.cardsRecorded_matches_home || s.cardTimingRecorded_matches_home || matchesHome;
+    const offsidesRecorded = s.offsidesRecorded_matches_home || matchesHome;
+    const timingRecorded = s.seasonMatchesPlayedGoalTimingRecorded_home || matchesHome;
+
+    const flags = [];
+
+    // Consistency Checks
+    _checkMonotonicity(extras.goals.ou_ft.home, 'goals_ft_home', flags);
+    _checkMonotonicity(extras.corners.totals.home, 'corners_total_home', flags);
+
+    // Avg Consistency (Total ~ For + Against)
+    // Core stats are already parsed numbers
+    const c = currentStats;
+    if (Math.abs(c.corners.total_avg_home - (c.corners.for_avg_home + c.corners.against_avg_home)) > 1.5) {
+        flags.push('avg_inconsistency:corners_home');
+    }
 
     return {
         competition_valid: meta.competition_id > 0,
-        matches_overall: stats.seasonMatchesPlayed_overall || 0,
+        matches_overall: currentStats.matches.overall,
         matches_home: matchesHome,
         sample_home_matches: matchesHome,
-        has_xg: (stats.xg_for_avg_home !== undefined && stats.xg_for_avg_home !== null),
+
+        has_xg: (c.xg.for_avg_home > 0 || c.xg.against_avg_home > 0),
         has_corners: cornersRecorded > 3,
         has_cards: cardsRecorded > 3,
 
@@ -436,22 +467,42 @@ function _calculateQuality(stats, meta, missingFields) {
             corners_home: (matchesHome >= 3 && cornersRecorded > 0) ? 'ok' : 'low',
             cards_home: (matchesHome >= 3 && cardsRecorded > 0) ? 'ok' : 'low'
         },
-        missing_fields: missingFields || []
+        missing_fields: missingFields || [],
+        flags: flags
     };
+}
+
+function _checkMonotonicity(obj, label, flags) {
+    if (!obj) return;
+    // Keys are "0.5", "1.5"... sort numerically
+    const keys = Object.keys(obj).sort((a, b) => parseFloat(a) - parseFloat(b));
+    for (let i = 0; i < keys.length - 1; i++) {
+        const k1 = keys[i];
+        const k2 = keys[i+1];
+        if (obj[k1] < obj[k2]) { // Lower line has LOWER prob? Bad. P(>0.5) must be >= P(>1.5)
+            flags.push(`monotonicity_break:${label}`);
+            break;
+        }
+    }
 }
 
 function _num(val) {
     if (val === undefined || val === null || val === "") return 0;
-    return Number(val);
+    const n = Number(val);
+    return Number.isFinite(n) ? n : 0;
 }
 
 function _pct(stats, key) {
     const val = stats[key];
     const n = _num(val);
 
-    // Strict Rule: Normalize if key contains "percentage" (case insensitive)
     if (key && key.toLowerCase().includes('percentage')) {
-        return n / 100;
+        // Guard: Only divide if > 1 (Assuming 0-1 range is target and 100 is max)
+        // If raw is 0.85, n is 0.85. 0.85 > 1 is false. returns 0.85. Correct.
+        // If raw is 85, n is 85. 85 > 1 is true. returns 0.85. Correct.
+        // If raw is 1, n is 1. 1 > 1 is false. returns 1. Correct (100%).
+        // If raw is 0, returns 0.
+        return n > 1 ? n / 100 : n;
     }
     return n;
 }
@@ -464,13 +515,11 @@ function _safeSum(a, b) {
 // EXECUTION (n8n / Node)
 // ============================================================================
 
-// N8N WRAPPER
 if (typeof items !== 'undefined' && Array.isArray(items)) {
     const results = [];
     for (const item of items) {
         let inputData = item.json || item;
 
-        // UNWRAP API RESPONSE { success: true, data: [...] }
         if (inputData && inputData.data && Array.isArray(inputData.data)) {
             inputData = inputData.data;
         }
@@ -484,7 +533,6 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
     return results;
 }
 
-// NODE.JS EXPORT
 if (typeof module !== 'undefined') {
     module.exports = { normalizeHomeTeam };
 }
