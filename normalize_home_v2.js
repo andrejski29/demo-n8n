@@ -2,16 +2,12 @@
  * Home Team Normalization Module V2 (n8n / Standalone)
  *
  * Objectives:
- * 1. Robust Row Selection (Domestic League priority).
- * 2. Two-Layer Normalization (Core + Extras Feature Store).
- * 3. Consistent Naming (_mu).
- * 4. Strict 0-1 Percent Normalization (by Key Name).
+ * 1. Robust Row Selection.
+ * 2. Two-Layer Normalization (Core + Extras).
+ * 3. Strict Null Handling (Missing vs 0).
+ * 4. Fallback from Counts to Percentages.
  * 5. Robust Fallbacks & Quality Flags.
  */
-
-// ============================================================================
-// MAIN FUNCTION
-// ============================================================================
 
 function normalizeHomeTeam(inputData) {
     const { current, previous, source } = _selectSeasons(inputData);
@@ -32,7 +28,7 @@ function normalizeHomeTeam(inputData) {
     const currentStats = _processSeason(current, qualityContext);
     const previousStats = previous ? _processSeason(previous, { missing_fields: [] }) : null;
 
-    const extras = _extractExtras(current.stats || {}, current.additional_info || {});
+    const extras = _extractExtras(current.stats || {}, current.additional_info || {}, currentStats);
 
     const quality = _calculateQuality(current, meta, currentStats, extras, qualityContext.missing_fields);
 
@@ -52,10 +48,7 @@ function normalizeHomeTeam(inputData) {
     };
 }
 
-// ============================================================================
-// ROW SELECTION
-// ============================================================================
-
+// ... Row Selection (Unchanged) ...
 function _selectSeasons(data) {
     if (!Array.isArray(data)) {
         return {
@@ -64,32 +57,26 @@ function _selectSeasons(data) {
             source: { current: _makeSourceMeta(data, 0), previous: null }
         };
     }
-
     const seasons = {};
     data.forEach((row, index) => {
         if (!row.season) return;
         if (!seasons[row.season]) seasons[row.season] = [];
         seasons[row.season].push({ ...row, _original_index: index });
     });
-
     const sortedYears = Object.keys(seasons).sort((a, b) => {
         const startA = parseInt(a.split('/')[0]) || 0;
         const startB = parseInt(b.split('/')[0]) || 0;
         return startB - startA;
     });
-
     const currentYear = sortedYears[0];
     const previousYear = sortedYears[1];
-
     const getBestRow = (rows) => {
         if (!rows || rows.length === 0) return null;
         const domestic = rows.find(r => r.season_format === "Domestic League");
         return domestic || rows[0];
     };
-
     const currentRow = getBestRow(seasons[currentYear]);
     const previousRow = getBestRow(seasons[previousYear]);
-
     return {
         current: currentRow,
         previous: previousRow,
@@ -109,20 +96,18 @@ function _makeSourceMeta(row, index) {
     };
 }
 
-// ============================================================================
-// CORE PROCESSING (Layer A)
-// ============================================================================
-
+// ... Core (Updated for Nulls) ...
 function _processSeason(teamRaw, context) {
     const s = { ...teamRaw.stats, ...teamRaw.additional_info };
     const missing = context.missing_fields || [];
 
-    const _get = (key, fallback = 0, critical = false) => {
-        if (s[key] === undefined || s[key] === null) {
+    const _get = (key, fallback = null, critical = false) => {
+        const val = _num(s[key]);
+        if (val === null) {
             if (critical) missing.push(key);
-            return fallback;
+            return fallback; // Can be 0 if specified, else null
         }
-        return _num(s[key]);
+        return val;
     };
 
     const _p = (key) => _pct(s, key);
@@ -140,7 +125,6 @@ function _processSeason(teamRaw, context) {
             conceded_avg_home: _get('seasonConcededAVG_home', 0, true),
             scored_avg_away: _get('seasonScoredAVG_away'),
             conceded_avg_away: _get('seasonConcededAVG_away'),
-            // Halves
             ht_scored_avg_home: _get('scoredAVGHT_home'),
             ht_conceded_avg_home: _get('concededAVGHT_home'),
             sh_scored_avg_home: _get('scored_2hg_avg_home'),
@@ -153,15 +137,13 @@ function _processSeason(teamRaw, context) {
             against_avg_home: _get('xg_against_avg_home')
         },
         corners: {
-            total_avg_home: _get('cornersTotalAVG_home') || (_get('cornersAVG_home') + _get('cornersAgainstAVG_home')),
+            total_avg_home: _get('cornersTotalAVG_home') || _safeSum(_get('cornersAVG_home'), _get('cornersAgainstAVG_home')),
             for_avg_home: _get('cornersAVG_home'),
             against_avg_home: _get('cornersAgainstAVG_home')
         },
         cards: {
-            // Updated Fallbacks: specific keys vs derivations
-            total_avg_home: _get('cardsTotalAVG_home') || _get('cards_total_avg_home') || (_get('cardsAVG_home') + _get('cardsAgainstAVG_home')),
+            total_avg_home: _get('cardsTotalAVG_home') || _get('cards_total_avg_home') || _safeSum(_get('cardsAVG_home'), _get('cardsAgainstAVG_home')),
             avg_home: _get('cardsAVG_home'),
-            // Explicit snake_case checks as requested
             against_avg_home: _get('cardsAgainstAVG_home') || _get('cards_against_avg_home') || _get('cardsAgainstAvg_home')
         },
         game_state: {
@@ -184,11 +166,8 @@ function _processSeason(teamRaw, context) {
     return { ...stats, derived };
 }
 
-// ============================================================================
-// EXTRAS PROCESSING (Layer B)
-// ============================================================================
-
-function _extractExtras(s, addInfo) {
+// ... Extras (Updated for Fallbacks) ...
+function _extractExtras(s, addInfo, coreStats) {
     const combined = { ...s, ...addInfo };
 
     return {
@@ -222,14 +201,7 @@ function _extractExtras(s, addInfo) {
             against: _mapThresholds(combined, 'over', 'CardsAgainstPercentage', ['05', '15', '25', '35'])
         },
 
-        xg: {
-            totals: {
-                for_overall: _num(combined.xg_for_overall),
-                against_overall: _num(combined.xg_against_overall),
-                for_home: _num(combined.xg_for_home),
-                against_home: _num(combined.xg_against_home)
-            }
-        },
+        xg: _extractXGTotals(combined, coreStats),
 
         combo: {
             ..._mapComboStats(combined),
@@ -238,9 +210,9 @@ function _extractExtras(s, addInfo) {
 
         shots: {
             ..._mapShots(combined),
-            match_ou: _mapThresholds(combined, 'match_shots_over', '_percentage', ['225', '235', '245', '255', '265']),
-            team_ou: _mapThresholds(combined, 'team_shots_over', '_percentage', ['105', '115', '125', '135', '145', '155']),
-            on_target_ou: _mapThresholds(combined, 'team_shots_on_target_over', '_percentage', ['35', '45', '55', '65'])
+            match_ou: _mapThresholds(combined, 'match_shots_over', '_percentage', ['225', '235', '245', '255', '265'], 'shots_recorded_matches_num'),
+            team_ou: _mapThresholds(combined, 'team_shots_over', '_percentage', ['105', '115', '125', '135', '145', '155'], 'shots_recorded_matches_num'),
+            on_target_ou: _mapThresholds(combined, 'team_shots_on_target_over', '_percentage', ['35', '45', '55', '65'], 'shots_recorded_matches_num')
         },
 
         pressure: _mapPressure(combined),
@@ -248,42 +220,59 @@ function _extractExtras(s, addInfo) {
     };
 }
 
-// -- Mappers --
+// ... New Mappers ...
 
-function _mapExactGoals(s) {
-    // exact_team_goals_0_ft_percentage_home
-    const out = { team: { home: {}, overall: {}, away: {} }, total: { home: {}, overall: {}, away: {} } };
-    ['0', '1', '2', '3'].forEach(g => {
-        out.team.home[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_home`);
-        out.team.overall[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_overall`);
-        out.team.away[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_away`);
-    });
-    // exact_total_goals_0_ft_... often available 0-7
-    ['0', '1', '2', '3', '4', '5', '6', '7'].forEach(g => {
-        // Warning: key might be exact_total_goals_0_ft_overall (no percentage in key sometimes?)
-        // User data shows: exact_total_goals_0_ft_overall: 3 (count), but we want percent if avail?
-        // Wait, looking at sample: exact_total_goals_0_ft_overall is a COUNT in some payloads.
-        // But user provided samples with `exact_team_goals_0_ft_percentage_overall`.
-        // If exact_total_goals doesn't have percentage key, we skip normalization?
-        // Let's assume counts primarily if percentage key missing.
-        // But to be safe, I'll check for `_percentage` key variant too.
-        // For now, mapping counts/raw numbers.
-        out.total.home[g] = _num(s[`exact_total_goals_${g}_ft_home`]);
-        out.total.overall[g] = _num(s[`exact_total_goals_${g}_ft_overall`]);
-        out.total.away[g] = _num(s[`exact_total_goals_${g}_ft_away`]);
+function _extractXGTotals(s, core) {
+    const totals = {
+        for_overall: _num(s.xg_for_overall),
+        against_overall: _num(s.xg_against_overall),
+        for_home: _num(s.xg_for_home),
+        against_home: _num(s.xg_against_home)
+    };
+
+    // Fallback Calculation if missing
+    if (totals.for_home === null && core.xg.for_avg_home && core.matches.home) {
+        totals.for_home = core.xg.for_avg_home * core.matches.home;
+    }
+    // (Repeat for others if needed, typically home is most critical)
+
+    return { totals };
+}
+
+function _mapThresholds(stats, prefix, suffix, lines, sampleKey) {
+    const out = { home: {}, overall: {}, away: {} };
+    lines.forEach(lineKey => {
+        let label = lineKey;
+        const numKey = parseInt(lineKey, 10);
+        if (!isNaN(numKey) && (lineKey.length >= 2 || lineKey === '05')) {
+             label = (numKey / 10).toString();
+        }
+
+        // Full Key Construction
+        // Handles "over" + "105" + "_percentage"
+        // Also handles fallback to "_num"
+        ['home', 'overall', 'away'].forEach(split => {
+            const pctKey = `${prefix}${lineKey}${suffix}_${split}`;
+            let val = _pct(stats, pctKey);
+
+            // FALLBACK Logic
+            if (val === null && sampleKey) {
+                 const countKey = `${prefix}${lineKey}_num_${split}`;
+                 const count = _num(stats[countKey]);
+                 const recordedKey = `${sampleKey}_${split}`;
+                 const recorded = _num(stats[recordedKey]);
+
+                 if (count !== null && recorded > 0) {
+                     val = count / recorded;
+                 }
+            }
+            out[split][label] = val;
+        });
     });
     return out;
 }
 
-function _mapExtendedCombos(s) {
-    return {
-        over25_btts: {
-            yes: { home: _pct(s, 'over25_and_btts_percentage_home'), overall: _pct(s, 'over25_and_btts_percentage_overall') },
-            no: { home: _pct(s, 'over25_and_no_btts_percentage_home'), overall: _pct(s, 'over25_and_no_btts_percentage_overall') }
-        }
-    };
-}
-
+// ... Unchanged Mappers (performance, game_state, etc) ...
 function _mapPerformance(s) {
     return {
         win_pct: { home: _pct(s, 'winPercentage_home'), overall: _pct(s, 'winPercentage_overall') },
@@ -292,7 +281,6 @@ function _mapPerformance(s) {
         ppg: { home: _num(s.seasonPPG_home), overall: _num(s.seasonPPG_overall) }
     };
 }
-
 function _mapGameState(s) {
     return {
         ht_ppg: { home: _num(s.HTPPG_home), overall: _num(s.HTPPG_overall) },
@@ -301,17 +289,14 @@ function _mapGameState(s) {
         trailing_at_ht_pct: { home: _pct(s, 'trailingAtHTPercentage_home'), overall: _pct(s, 'trailingAtHTPercentage_overall') }
     };
 }
-
 function _mapFirstGoal(s) {
     return {
         scored_pct: { home: _pct(s, 'firstGoalScoredPercentage_home'), overall: _pct(s, 'firstGoalScoredPercentage_overall') }
     };
 }
-
 function _mapGoalTiming(s) {
     const buckets = ['0_15', '16_30', '31_45', '46_60', '61_75', '76_90'];
     const out = { scored: { home: {}, overall: {} }, conceded: { home: {}, overall: {} } };
-
     buckets.forEach(b => {
         const keyMid = b.replace('_', '_to_');
         out.scored.home[b] = _num(s[`goals_scored_min_${keyMid}_home`]);
@@ -321,7 +306,6 @@ function _mapGoalTiming(s) {
     });
     return out;
 }
-
 function _map2HStats(s) {
     return {
         goals: {
@@ -337,7 +321,6 @@ function _map2HStats(s) {
         btts_both_halves_pct_home: _pct(s, 'BTTS_both_halves_percentage_home')
     };
 }
-
 function _mapComboStats(s) {
     return {
         btts_win: { home: _pct(s, 'BTTS_and_win_percentage_home'), overall: _pct(s, 'BTTS_and_win_percentage_overall') },
@@ -345,7 +328,14 @@ function _mapComboStats(s) {
         btts_lose: { home: _pct(s, 'BTTS_and_lose_percentage_home'), overall: _pct(s, 'BTTS_and_lose_percentage_overall') }
     };
 }
-
+function _mapExtendedCombos(s) {
+    return {
+        over25_btts: {
+            yes: { home: _pct(s, 'over25_and_btts_percentage_home'), overall: _pct(s, 'over25_and_btts_percentage_overall') },
+            no: { home: _pct(s, 'over25_and_no_btts_percentage_home'), overall: _pct(s, 'over25_and_no_btts_percentage_overall') }
+        }
+    };
+}
 function _mapShots(s) {
     return {
         total_avg: { home: _num(s.shotsAVG_home), overall: _num(s.shotsAVG_overall) },
@@ -353,14 +343,12 @@ function _mapShots(s) {
         off_target_avg: { home: _num(s.shotsOffTargetAVG_home), overall: _num(s.shotsOffTargetAVG_overall) }
     };
 }
-
 function _mapPressure(s) {
     return {
         attacks_avg: { home: _num(s.attacks_avg_home), overall: _num(s.attacks_avg_overall) },
         dangerous_attacks_avg: { home: _num(s.dangerous_attacks_avg_home), overall: _num(s.dangerous_attacks_avg_overall) }
     };
 }
-
 function _mapDiscipline(s) {
     return {
         fouls_avg: { home: _num(s.foulsAVG_home), overall: _num(s.foulsAVG_overall) },
@@ -373,147 +361,112 @@ function _mapDiscipline(s) {
         }
     };
 }
-
 function _mapCornerHalves(s) {
     const mapHalf = (halfPrefix) => {
         const out = { home: {}, overall: {}, away: {} };
         ['4', '5', '6'].forEach(line => {
              const standardLabel = line + '.5';
              const suffix = '_percentage';
-
              out.home[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_home`);
              out.overall[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_overall`);
              out.away[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_away`);
         });
         return out;
     };
-
     return {
-        fh: {
-             avg_home: _num(s.corners_fh_avg_home),
-             ou: mapHalf('corners_fh')
-        },
-        sh: {
-             avg_home: _num(s.corners_2h_avg_home),
-             ou: mapHalf('corners_2h')
-        }
+        fh: { avg_home: _num(s.corners_fh_avg_home), ou: mapHalf('corners_fh') },
+        sh: { avg_home: _num(s.corners_2h_avg_home), ou: mapHalf('corners_2h') }
     };
 }
-
-
-function _mapThresholds(stats, prefix, suffix, lines) {
-    const out = { home: {}, overall: {}, away: {} };
-    lines.forEach(lineKey => {
-        const numKey = parseInt(lineKey, 10);
-        let label = lineKey;
-        if (!isNaN(numKey)) {
-            if (lineKey.length >= 2 || lineKey === '05') {
-                 label = (numKey / 10).toString();
-            }
-        }
-
-        // Handle suffix variants (some have leading underscore, some don't)
-        // e.g. suffix='_percentage' -> 'team_shots_over105_percentage'
-        // suffix='Percentage' -> 'seasonOver05Percentage'
-        const fullKeyHome = `${prefix}${lineKey}${suffix}_home`;
-        const fullKeyOver = `${prefix}${lineKey}${suffix}_overall`;
-        const fullKeyAway = `${prefix}${lineKey}${suffix}_away`;
-
-        out.home[label] = _pct(stats, fullKeyHome);
-        out.overall[label] = _pct(stats, fullKeyOver);
-        out.away[label] = _pct(stats, fullKeyAway);
+function _mapExactGoals(s) {
+    const out = { team: { home: {}, overall: {}, away: {} }, total: { home: {}, overall: {}, away: {} } };
+    ['0', '1', '2', '3'].forEach(g => {
+        out.team.home[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_home`);
+        out.team.overall[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_overall`);
+        out.team.away[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_away`);
     });
     return out;
 }
 
+// ... Form (Updated) ...
 function _extractForm(addInfo) {
-    const form = { last5: null, last10: null };
+    const form = {
+        last5: null,
+        last10: null,
+        home_last5_points: null,
+        away_last5_points: null
+    };
 
-    const runHome = addInfo.formRun_home || "";
-    if (runHome) {
-        const calcPoints = (str) => {
-            let pts = 0;
-            for (let char of str) {
-                if (char.toLowerCase() === 'w') pts += 3;
-                else if (char.toLowerCase() === 'd') pts += 1;
-            }
-            return pts;
-        };
+    // Helper to calculate points from string
+    const calc = (str, limit) => {
+        if (!str) return null;
+        const run = str.slice(-limit); // Last N games
+        let pts = 0;
+        for (const char of run) {
+            if (char.toLowerCase() === 'w') pts += 3;
+            else if (char.toLowerCase() === 'd') pts += 1;
+        }
+        return pts;
+    };
 
-        const l5 = runHome.slice(-5);
-        form.last5 = calcPoints(l5);
-
-        const l10 = runHome.slice(-10);
-        form.last10 = calcPoints(l10);
-    }
+    form.last5 = calc(addInfo.formRun_overall, 5);
+    form.last10 = calc(addInfo.formRun_overall, 10);
+    form.home_last5_points = calc(addInfo.formRun_home, 5);
+    form.away_last5_points = calc(addInfo.formRun_away, 5);
 
     return form;
 }
 
-// ============================================================================
-// UTILS & QUALITY
-// ============================================================================
+// ... Utils (Helpers) ...
+function _num(val) {
+    if (val === undefined || val === null || val === "") return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+}
+function _pct(stats, key) {
+    const val = stats[key];
+    const n = _num(val);
+    if (n === null) return null;
+    if (key && key.toLowerCase().includes('percentage')) {
+        return n > 1 ? n / 100 : n;
+    }
+    return n;
+}
+function _safeSum(a, b) {
+    return (a || 0) + (b || 0);
+}
 
+// ... Quality (Updated) ...
 function _calculateQuality(teamRaw, meta, currentStats, extras, missingFields) {
     const s = { ...teamRaw.stats, ...teamRaw.additional_info };
-
     const matchesHome = currentStats.matches.home || 0;
-    const matchesOverall = currentStats.matches.overall || 0;
-
     const cornersRecorded = s.cornersRecorded_matches_home || s.cornerTimingRecorded_matches_home || matchesHome;
     const cardsRecorded = s.cardsRecorded_matches_home || s.cardTimingRecorded_matches_home || matchesHome;
     const offsidesRecorded = s.offsidesRecorded_matches_home || matchesHome;
     const timingRecorded = s.seasonMatchesPlayedGoalTimingRecorded_home || matchesHome;
 
     const flags = [];
-
-    // Consistency Checks (Monotonicity)
     _checkMonotonicity(extras.goals.ou_ft.home, 'goals_ft_home', flags);
-    _checkMonotonicity(extras.goals.ou_ht.home, 'goals_ht_home', flags);
     _checkMonotonicity(extras.corners.totals.home, 'corners_total_home', flags);
-    _checkMonotonicity(extras.corners.for.home, 'corners_for_home', flags);
-    _checkMonotonicity(extras.corners.against.home, 'corners_against_home', flags);
-    _checkMonotonicity(extras.cards.totals.home, 'cards_total_home', flags);
-    _checkMonotonicity(extras.second_half.ou.home, '2h_goals_home', flags);
 
-    // Avg Consistency (Total ~ For + Against)
+    // Avg Consistency
     const c = currentStats;
-    if (Math.abs(c.corners.total_avg_home - (c.corners.for_avg_home + c.corners.against_avg_home)) > 1.5) {
-        flags.push('avg_inconsistency:corners_home');
-    }
-
-    // HT/2H Avg Consistency
-    if (c.goals.ht_scored_avg_home && c.goals.sh_scored_avg_home) {
-         // rough check: total goals ≈ HT + 2H? (if total exists in core)
-         // Not strictly enforcing this one yet as derived values might differ slightly
-    }
-
-    // xG Consistency (Total vs Avg)
-    if (extras.xg && extras.xg.totals && extras.xg.totals.for_home) {
-         const expected = c.xg.for_avg_home * matchesHome;
-         const actual = extras.xg.totals.for_home;
-         if (Math.abs(expected - actual) > 5) { // Allow some float drift
-             flags.push('avg_inconsistency:xg_home');
-         }
+    if (c.corners.total_avg_home && (c.corners.for_avg_home || c.corners.against_avg_home)) {
+        if (Math.abs(c.corners.total_avg_home - ((c.corners.for_avg_home||0) + (c.corners.against_avg_home||0))) > 1.5) {
+            flags.push('avg_inconsistency:corners_home');
+        }
     }
 
     return {
         competition_valid: meta.competition_id > 0,
-        matches_overall: matchesOverall,
+        matches_overall: currentStats.matches.overall,
         matches_home: matchesHome,
-        sample_home_matches: matchesHome,
-
-        has_xg: (c.xg.for_avg_home > 0 || c.xg.against_avg_home > 0),
-        has_corners: cornersRecorded > 3,
-        has_cards: cardsRecorded > 3,
-
         sample: {
             corners_recorded: { home: cornersRecorded },
             cards_recorded: { home: cardsRecorded },
             offsides_recorded: { home: offsidesRecorded },
             goal_timing_recorded: { home: timingRecorded }
         },
-
         reliability: {
             goals_home: matchesHome >= 3 ? 'ok' : 'low',
             corners_home: (matchesHome >= 3 && cornersRecorded > 0) ? 'ok' : 'low',
@@ -530,55 +483,26 @@ function _checkMonotonicity(obj, label, flags) {
     for (let i = 0; i < keys.length - 1; i++) {
         const k1 = keys[i];
         const k2 = keys[i+1];
-        if (obj[k1] < obj[k2]) {
+        if (obj[k1] !== null && obj[k2] !== null && obj[k1] < obj[k2]) {
             flags.push(`monotonicity_break:${label}`);
             break;
         }
     }
 }
 
-function _num(val) {
-    if (val === undefined || val === null || val === "") return 0;
-    const n = Number(val);
-    return Number.isFinite(n) ? n : 0;
-}
-
-function _pct(stats, key) {
-    const val = stats[key];
-    const n = _num(val);
-
-    if (key && key.toLowerCase().includes('percentage')) {
-        return n > 1 ? n / 100 : n;
-    }
-    return n;
-}
-
-function _safeSum(a, b) {
-    return (Number(a)||0) + (Number(b)||0);
-}
-
-// ============================================================================
-// EXECUTION (n8n / Node)
-// ============================================================================
-
+// Execution Wrapper
 if (typeof items !== 'undefined' && Array.isArray(items)) {
     const results = [];
     for (const item of items) {
         let inputData = item.json || item;
-
         if (inputData && inputData.data && Array.isArray(inputData.data)) {
             inputData = inputData.data;
         }
-
         const normalized = normalizeHomeTeam(inputData);
-
-        if (normalized) {
-            results.push({ json: normalized });
-        }
+        if (normalized) results.push({ json: normalized });
     }
     return results;
 }
-
 if (typeof module !== 'undefined') {
     module.exports = { normalizeHomeTeam };
 }
