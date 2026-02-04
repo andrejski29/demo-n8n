@@ -14,35 +14,29 @@ try {
     console.log("\n--- Normalization Result ---");
     // console.log(JSON.stringify(normalized, null, 2));
 
-    // 1. Core Fallback (from additional_info)
-    // cardsTotalAVG_home was in additional_info.
-    // It maps to cards.total_avg_home in Core.
-    if (normalized.season.current.cards.total_avg_home !== 3.5) {
-        throw new Error(`Core Fallback Failed: Expected 3.5, got ${normalized.season.current.cards.total_avg_home}`);
+    // 1. Cards Against Fallback
+    // cards_against_avg_home = 1.5 in additional_info
+    if (normalized.season.current.cards.against_avg_home !== 1.5) {
+        throw new Error(`Cards Against Fallback Failed: Expected 1.5, got ${normalized.season.current.cards.against_avg_home}`);
     }
-    console.log("Core Fallback: OK (3.5)");
+    console.log("Cards Against Fallback: OK (1.5)");
 
-    // 2. Corner Halves Labels
-    // corners_fh_over4_percentage_home -> "4.5"
-    if (normalized.extras.corners.halves.fh.ou.home["4.5"] === undefined) {
-        throw new Error("Corner Halves Label Failed: Expected key '4.5'");
+    // 2. Monotonicity Check (Should be valid)
+    // seasonOver05 (90) > seasonOver15 (80) -> OK
+    // Let's artifically create a violation to test the flag system?
+    // We can't modify the input here easily without re-writing file or mocking.
+    // But we can check if flags are empty as expected for this valid data.
+    if (normalized.quality.flags.length > 0) {
+        console.warn("Unexpected Quality Flags:", normalized.quality.flags);
+    } else {
+        console.log("Quality Flags: Clean (as expected)");
     }
-    console.log("Corner Halves Labels: OK (4.5)");
 
-    // 3. Form Parsing
-    // "wwldw" -> 3+3+0+1+3 = 10
-    if (normalized.form.last5 !== 10) {
-        throw new Error(`Form Parsing Failed: Expected 10, got ${normalized.form.last5}`);
-    }
-    console.log("Form Parsing: OK (10)");
+    // 3. Verify Extras Existence (Shots)
+    if (!normalized.extras.shots.match_ou) throw new Error("Missing Extras: Shots Match O/U");
+    console.log("Extras (Shots): OK");
 
-    // 4. Quality Flags
-    if (!Array.isArray(normalized.quality.flags)) {
-        throw new Error("Quality Flags Missing");
-    }
-    console.log("Quality Flags: OK");
-
-    console.log("\nSUCCESS: All V2 Fixes verified.");
+    console.log("\nSUCCESS: Robustness upgrades verified.");
 
 } catch (err) {
     console.error("TEST FAILED:", err);

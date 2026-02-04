@@ -13,10 +13,13 @@
           "seasonOver25Percentage_home": 45,
           "over95CornersPercentage_home": 27,
           "corners_fh_over4_percentage_home": 50,
-          "corners_2h_over4_percentage_home": 60
+          "corners_2h_over4_percentage_home": 60,
+          "seasonOver05Percentage_home": 90,
+          "seasonOver15Percentage_home": 80
         },
         "additional_info": {
             "cardsTotalAVG_home": 3.5,
+            "cards_against_avg_home": 1.5,
             "formRun_home": "wwldw",
             "corners_fh_avg_home": 2.5
         }

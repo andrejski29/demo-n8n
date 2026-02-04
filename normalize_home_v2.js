@@ -14,7 +14,6 @@
 // ============================================================================
 
 function normalizeHomeTeam(inputData) {
-    // 1. Deterministic Row Selection
     const { current, previous, source } = _selectSeasons(inputData);
 
     if (!current || !current.id) return null;
@@ -29,23 +28,16 @@ function normalizeHomeTeam(inputData) {
         season_source: source
     };
 
-    // 2. Process Seasons (Core Stats)
-    // We collect missing fields during processing
     const qualityContext = { missing_fields: [] };
     const currentStats = _processSeason(current, qualityContext);
     const previousStats = previous ? _processSeason(previous, { missing_fields: [] }) : null;
 
-    // 3. Extras (Rich Features from Current Season)
-    // We do extras BEFORE quality check to validate monotonicity on the extracted extras
     const extras = _extractExtras(current.stats || {}, current.additional_info || {});
 
-    // 4. Quality, Sample Sizes & Consistency Flags
     const quality = _calculateQuality(current, meta, currentStats, extras, qualityContext.missing_fields);
 
-    // 5. Form (Parse from additional_info if available)
     const form = _extractForm(current.additional_info || {});
 
-    // 6. Structure Output
     return {
         team_id: meta.id,
         team_name: meta.name,
@@ -66,7 +58,6 @@ function normalizeHomeTeam(inputData) {
 
 function _selectSeasons(data) {
     if (!Array.isArray(data)) {
-        // Single object case
         return {
             current: data,
             previous: null,
@@ -123,7 +114,6 @@ function _makeSourceMeta(row, index) {
 // ============================================================================
 
 function _processSeason(teamRaw, context) {
-    // FIX: Merge stats + additional_info to catch fallbacks like cards_total_avg
     const s = { ...teamRaw.stats, ...teamRaw.additional_info };
     const missing = context.missing_fields || [];
 
@@ -135,7 +125,6 @@ function _processSeason(teamRaw, context) {
         return _num(s[key]);
     };
 
-    // Percent Helper
     const _p = (key) => _pct(s, key);
 
     const stats = {
@@ -169,9 +158,11 @@ function _processSeason(teamRaw, context) {
             against_avg_home: _get('cornersAgainstAVG_home')
         },
         cards: {
+            // Updated Fallbacks: specific keys vs derivations
             total_avg_home: _get('cardsTotalAVG_home') || _get('cards_total_avg_home') || (_get('cardsAVG_home') + _get('cardsAgainstAVG_home')),
             avg_home: _get('cardsAVG_home'),
-            against_avg_home: _get('cardsAgainstAVG_home')
+            // Explicit snake_case checks as requested
+            against_avg_home: _get('cardsAgainstAVG_home') || _get('cards_against_avg_home') || _get('cardsAgainstAvg_home')
         },
         game_state: {
             ppg_home: _get('seasonPPG_home'),
@@ -212,7 +203,8 @@ function _extractExtras(s, addInfo) {
             scored_both_halves_pct: {
                  home: _pct(combined, 'scoredBothHalvesPercentage_home'),
                  overall: _pct(combined, 'scoredBothHalvesPercentage_overall')
-            }
+            },
+            exact: _mapExactGoals(combined)
         },
 
         second_half: _map2HStats(combined),
@@ -230,14 +222,67 @@ function _extractExtras(s, addInfo) {
             against: _mapThresholds(combined, 'over', 'CardsAgainstPercentage', ['05', '15', '25', '35'])
         },
 
-        combo: _mapComboStats(combined),
-        shots: _mapShots(combined),
+        xg: {
+            totals: {
+                for_overall: _num(combined.xg_for_overall),
+                against_overall: _num(combined.xg_against_overall),
+                for_home: _num(combined.xg_for_home),
+                against_home: _num(combined.xg_against_home)
+            }
+        },
+
+        combo: {
+            ..._mapComboStats(combined),
+            extended: _mapExtendedCombos(combined)
+        },
+
+        shots: {
+            ..._mapShots(combined),
+            match_ou: _mapThresholds(combined, 'match_shots_over', '_percentage', ['225', '235', '245', '255', '265']),
+            team_ou: _mapThresholds(combined, 'team_shots_over', '_percentage', ['105', '115', '125', '135', '145', '155']),
+            on_target_ou: _mapThresholds(combined, 'team_shots_on_target_over', '_percentage', ['35', '45', '55', '65'])
+        },
+
         pressure: _mapPressure(combined),
         discipline: _mapDiscipline(combined)
     };
 }
 
 // -- Mappers --
+
+function _mapExactGoals(s) {
+    // exact_team_goals_0_ft_percentage_home
+    const out = { team: { home: {}, overall: {}, away: {} }, total: { home: {}, overall: {}, away: {} } };
+    ['0', '1', '2', '3'].forEach(g => {
+        out.team.home[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_home`);
+        out.team.overall[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_overall`);
+        out.team.away[g] = _pct(s, `exact_team_goals_${g}_ft_percentage_away`);
+    });
+    // exact_total_goals_0_ft_... often available 0-7
+    ['0', '1', '2', '3', '4', '5', '6', '7'].forEach(g => {
+        // Warning: key might be exact_total_goals_0_ft_overall (no percentage in key sometimes?)
+        // User data shows: exact_total_goals_0_ft_overall: 3 (count), but we want percent if avail?
+        // Wait, looking at sample: exact_total_goals_0_ft_overall is a COUNT in some payloads.
+        // But user provided samples with `exact_team_goals_0_ft_percentage_overall`.
+        // If exact_total_goals doesn't have percentage key, we skip normalization?
+        // Let's assume counts primarily if percentage key missing.
+        // But to be safe, I'll check for `_percentage` key variant too.
+        // For now, mapping counts/raw numbers.
+        out.total.home[g] = _num(s[`exact_total_goals_${g}_ft_home`]);
+        out.total.overall[g] = _num(s[`exact_total_goals_${g}_ft_overall`]);
+        out.total.away[g] = _num(s[`exact_total_goals_${g}_ft_away`]);
+    });
+    return out;
+}
+
+function _mapExtendedCombos(s) {
+    return {
+        over25_btts: {
+            yes: { home: _pct(s, 'over25_and_btts_percentage_home'), overall: _pct(s, 'over25_and_btts_percentage_overall') },
+            no: { home: _pct(s, 'over25_and_no_btts_percentage_home'), overall: _pct(s, 'over25_and_no_btts_percentage_overall') }
+        }
+    };
+}
 
 function _mapPerformance(s) {
     return {
@@ -271,7 +316,6 @@ function _mapGoalTiming(s) {
         const keyMid = b.replace('_', '_to_');
         out.scored.home[b] = _num(s[`goals_scored_min_${keyMid}_home`]);
         out.scored.overall[b] = _num(s[`goals_scored_min_${keyMid}`] || s[`goals_scored_min_${keyMid}_overall`]);
-
         out.conceded.home[b] = _num(s[`goals_conceded_min_${keyMid}_home`]);
         out.conceded.overall[b] = _num(s[`goals_conceded_min_${keyMid}`] || s[`goals_conceded_min_${keyMid}_overall`]);
     });
@@ -331,12 +375,11 @@ function _mapDiscipline(s) {
 }
 
 function _mapCornerHalves(s) {
-    // Dedicated mapping for Corner Halves to standard X.5 labels
     const mapHalf = (halfPrefix) => {
         const out = { home: {}, overall: {}, away: {} };
         ['4', '5', '6'].forEach(line => {
-             const standardLabel = line + '.5'; // 4 -> 4.5
-             const suffix = '_percentage'; // e.g. corners_fh_over4_percentage_home
+             const standardLabel = line + '.5';
+             const suffix = '_percentage';
 
              out.home[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_home`);
              out.overall[standardLabel] = _pct(s, `${halfPrefix}_over${line}${suffix}_overall`);
@@ -364,12 +407,14 @@ function _mapThresholds(stats, prefix, suffix, lines) {
         const numKey = parseInt(lineKey, 10);
         let label = lineKey;
         if (!isNaN(numKey)) {
-            // Standard /10 logic for 2-3 digit codes (05, 105)
             if (lineKey.length >= 2 || lineKey === '05') {
                  label = (numKey / 10).toString();
             }
         }
 
+        // Handle suffix variants (some have leading underscore, some don't)
+        // e.g. suffix='_percentage' -> 'team_shots_over105_percentage'
+        // suffix='Percentage' -> 'seasonOver05Percentage'
         const fullKeyHome = `${prefix}${lineKey}${suffix}_home`;
         const fullKeyOver = `${prefix}${lineKey}${suffix}_overall`;
         const fullKeyAway = `${prefix}${lineKey}${suffix}_away`;
@@ -381,17 +426,8 @@ function _mapThresholds(stats, prefix, suffix, lines) {
     return out;
 }
 
-// ============================================================================
-// FORM EXTRACTOR
-// ============================================================================
 function _extractForm(addInfo) {
     const form = { last5: null, last10: null };
-
-    // Simple point calculator: W=3, D=1, L=0
-    // String looks like "wwlwd" or "dwdll..." (most recent LAST? or FIRST? FootyStats usually recent last in string... wait.
-    // User says: "formRun_ strings* -> compute last5_points"
-    // Usually FootyStats formRun is Left=Oldest, Right=Newest.
-    // e.g. "wwl" -> Win, Win, Loss (Recent).
 
     const runHome = addInfo.formRun_home || "";
     if (runHome) {
@@ -404,7 +440,6 @@ function _extractForm(addInfo) {
             return pts;
         };
 
-        // Take last 5 chars
         const l5 = runHome.slice(-5);
         form.last5 = calcPoints(l5);
 
@@ -420,13 +455,11 @@ function _extractForm(addInfo) {
 // ============================================================================
 
 function _calculateQuality(teamRaw, meta, currentStats, extras, missingFields) {
-    // Use the combined stats from Core processing (or re-merge if needed, but we passed checks)
-    // Actually we need the raw combined for recorded counters
     const s = { ...teamRaw.stats, ...teamRaw.additional_info };
 
     const matchesHome = currentStats.matches.home || 0;
+    const matchesOverall = currentStats.matches.overall || 0;
 
-    // Fallback for Recorded counters
     const cornersRecorded = s.cornersRecorded_matches_home || s.cornerTimingRecorded_matches_home || matchesHome;
     const cardsRecorded = s.cardsRecorded_matches_home || s.cardTimingRecorded_matches_home || matchesHome;
     const offsidesRecorded = s.offsidesRecorded_matches_home || matchesHome;
@@ -434,20 +467,39 @@ function _calculateQuality(teamRaw, meta, currentStats, extras, missingFields) {
 
     const flags = [];
 
-    // Consistency Checks
+    // Consistency Checks (Monotonicity)
     _checkMonotonicity(extras.goals.ou_ft.home, 'goals_ft_home', flags);
+    _checkMonotonicity(extras.goals.ou_ht.home, 'goals_ht_home', flags);
     _checkMonotonicity(extras.corners.totals.home, 'corners_total_home', flags);
+    _checkMonotonicity(extras.corners.for.home, 'corners_for_home', flags);
+    _checkMonotonicity(extras.corners.against.home, 'corners_against_home', flags);
+    _checkMonotonicity(extras.cards.totals.home, 'cards_total_home', flags);
+    _checkMonotonicity(extras.second_half.ou.home, '2h_goals_home', flags);
 
     // Avg Consistency (Total ~ For + Against)
-    // Core stats are already parsed numbers
     const c = currentStats;
     if (Math.abs(c.corners.total_avg_home - (c.corners.for_avg_home + c.corners.against_avg_home)) > 1.5) {
         flags.push('avg_inconsistency:corners_home');
     }
 
+    // HT/2H Avg Consistency
+    if (c.goals.ht_scored_avg_home && c.goals.sh_scored_avg_home) {
+         // rough check: total goals ≈ HT + 2H? (if total exists in core)
+         // Not strictly enforcing this one yet as derived values might differ slightly
+    }
+
+    // xG Consistency (Total vs Avg)
+    if (extras.xg && extras.xg.totals && extras.xg.totals.for_home) {
+         const expected = c.xg.for_avg_home * matchesHome;
+         const actual = extras.xg.totals.for_home;
+         if (Math.abs(expected - actual) > 5) { // Allow some float drift
+             flags.push('avg_inconsistency:xg_home');
+         }
+    }
+
     return {
         competition_valid: meta.competition_id > 0,
-        matches_overall: currentStats.matches.overall,
+        matches_overall: matchesOverall,
         matches_home: matchesHome,
         sample_home_matches: matchesHome,
 
@@ -474,12 +526,11 @@ function _calculateQuality(teamRaw, meta, currentStats, extras, missingFields) {
 
 function _checkMonotonicity(obj, label, flags) {
     if (!obj) return;
-    // Keys are "0.5", "1.5"... sort numerically
     const keys = Object.keys(obj).sort((a, b) => parseFloat(a) - parseFloat(b));
     for (let i = 0; i < keys.length - 1; i++) {
         const k1 = keys[i];
         const k2 = keys[i+1];
-        if (obj[k1] < obj[k2]) { // Lower line has LOWER prob? Bad. P(>0.5) must be >= P(>1.5)
+        if (obj[k1] < obj[k2]) {
             flags.push(`monotonicity_break:${label}`);
             break;
         }
@@ -497,11 +548,6 @@ function _pct(stats, key) {
     const n = _num(val);
 
     if (key && key.toLowerCase().includes('percentage')) {
-        // Guard: Only divide if > 1 (Assuming 0-1 range is target and 100 is max)
-        // If raw is 0.85, n is 0.85. 0.85 > 1 is false. returns 0.85. Correct.
-        // If raw is 85, n is 85. 85 > 1 is true. returns 0.85. Correct.
-        // If raw is 1, n is 1. 1 > 1 is false. returns 1. Correct (100%).
-        // If raw is 0, returns 0.
         return n > 1 ? n / 100 : n;
     }
     return n;
