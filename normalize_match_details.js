@@ -1,3 +1,44 @@
+// -------------------------
+// n8n Node: Match Details Normalizer
+// -------------------------
+
+// --- 1. Input Extraction Helper ---
+// Robustly determines the input object regardless of n8n execution mode (Run Once vs Run Each)
+function getInput() {
+  if (typeof item !== 'undefined' && item.json) return item.json;
+  if (typeof items !== 'undefined' && items.length > 0 && items[0].json) return items[0].json;
+  if (typeof $input !== 'undefined' && $input.item) return $input.item.json;
+  if (typeof data !== 'undefined') return data; // Fallback for local testing if 'data' global is set
+  return {};
+}
+
+const inputData = getInput();
+
+// --- 2. Data Unwrapping ---
+// FootyStats responses can be:
+// A) { response: [ { ... } ] }  (API v2 style)
+// B) { data: { ... } }          (Match Details style)
+// C) { ... }                    (Directly merged)
+
+let raw;
+if (inputData.response && Array.isArray(inputData.response)) {
+  raw = inputData.response[0];
+} else if (inputData.data) {
+  // If 'data' is an array, take first; if object, take it.
+  raw = Array.isArray(inputData.data) ? inputData.data[0] : inputData.data;
+} else {
+  // Assume input is already the raw object
+  raw = inputData;
+}
+
+// Guard: If we still don't have an ID, abort or return error
+if (!raw || !raw.id) {
+   // Return empty or error object so n8n flow doesn't crash hard, or let it flow
+   // n8n expects an array of objects return.
+   return [{ json: { error: "No valid match data found", input_keys: Object.keys(inputData) } }];
+}
+
+// --- 3. Destructuring ---
 const {
   id,
   homeID,
@@ -15,10 +56,10 @@ const {
   status,
   h2h,
   odds_comparison
-} = data.response ? data.response[0] : (data.data || data); // Handle both wrapped and unwrapped
+} = raw;
 
-// --- CONFIGURATION: ODDS MAPPING ---
-// Maps FootyStats 'odds_comparison' keys to our Internal Keys.
+// --- 4. Configuration: Odds Mapping ---
+// Maps FootyStats 'odds_comparison' keys to Internal Keys.
 const ODDS_MAPPING = {
   "FT Result": {
     type: "1X2",
@@ -38,8 +79,6 @@ const ODDS_MAPPING = {
   },
   "Goals Over/Under": {
     type: "over_under",
-    // These keys often appear as "Over 0.5", "Under 2.5", etc.
-    // We will parse the selection string dynamically.
     is_line_market: true
   },
   "1st Half Goals": {
@@ -52,7 +91,7 @@ const ODDS_MAPPING = {
   }
 };
 
-// --- HELPER: Calculate Stats from Bookmakers ---
+// --- 5. Helpers ---
 function getOddsStats(bookmakerObj) {
   if (!bookmakerObj || typeof bookmakerObj !== 'object') return null;
 
@@ -69,8 +108,6 @@ function getOddsStats(bookmakerObj) {
   return { max: parseFloat(max.toFixed(3)), avg: parseFloat(avg.toFixed(3)), count: values.length };
 }
 
-// --- HELPER: Normalize Selection Key ---
-// E.g., "Over 2.5" -> { key: "over", line: 2.5 }
 function parseSelectionKey(selKey) {
   const lower = selKey.toLowerCase();
   if (lower.includes("over")) {
@@ -86,14 +123,12 @@ function parseSelectionKey(selKey) {
   return { key: selKey, line: null };
 }
 
-// --- MAIN LOGIC: Extract Odds ---
+// --- 6. Main Logic: Extract Odds ---
 const extracted_odds = {};
 
 if (odds_comparison) {
   for (const [fsMarket, marketData] of Object.entries(odds_comparison)) {
     const mapping = ODDS_MAPPING[fsMarket];
-
-    // Skip unmapped markets for now, or log them if needed
     if (!mapping) continue;
 
     for (const [fsSelection, bookies] of Object.entries(marketData)) {
@@ -101,17 +136,13 @@ if (odds_comparison) {
       if (!stats) continue;
 
       if (mapping.is_line_market) {
-        // Handle Over/Under Lines dynamically
         const parsed = parseSelectionKey(fsSelection);
         if (parsed.line !== null && !isNaN(parsed.line)) {
-          // Structure: odds.over_under[2.5].over = ...
           if (!extracted_odds[mapping.type]) extracted_odds[mapping.type] = {};
           if (!extracted_odds[mapping.type][parsed.line]) extracted_odds[mapping.type][parsed.line] = {};
-
           extracted_odds[mapping.type][parsed.line][parsed.key] = stats;
         }
       } else {
-        // Handle Fixed Selections (1X2, BTTS)
         const internalSel = mapping.selections[fsSelection];
         if (internalSel) {
           if (!extracted_odds[mapping.type]) extracted_odds[mapping.type] = {};
@@ -122,37 +153,30 @@ if (odds_comparison) {
   }
 }
 
-// --- FALLBACK: Flat Odds Fields ---
-// If detailed comparison is missing for a key, try to fill from flat fields (data.odds_ft_1, etc.)
-// Note: Flat fields are usually just one value (likely average or a specific bookie).
-// We treat them as 'avg' and 'max' equal if we don't have better data.
-
+// --- 7. Fallback: Flat Odds Fields ---
 const flat_mappings = [
   { fs: 'odds_ft_1', target: '1X2', sel: '1' },
   { fs: 'odds_ft_x', target: '1X2', sel: 'X' },
   { fs: 'odds_ft_2', target: '1X2', sel: '2' },
   { fs: 'odds_btts_yes', target: 'BTTS', sel: 'yes' },
   { fs: 'odds_btts_no', target: 'BTTS', sel: 'no' },
-  // Add O/U if needed, though usually they are plentiful in comparison
 ];
 
 flat_mappings.forEach(map => {
-  const val = parseFloat(data[map.fs]);
+  const val = parseFloat(raw[map.fs]);
   if (!isNaN(val) && val > 0) {
     if (!extracted_odds[map.target]) extracted_odds[map.target] = {};
-    // Only set if not already present from detailed comparison
     if (!extracted_odds[map.target][map.sel]) {
        extracted_odds[map.target][map.sel] = { max: val, avg: val, count: 1, source: "flat_fallback" };
     }
   }
 });
 
-
-// --- OUTPUT CONSTRUCTION ---
-return {
+// --- 8. Output Construction ---
+const outputItem = {
   match_id: id,
   match_status: status,
-  fixture_date: date_unix, // Unix timestamp
+  fixture_date: date_unix,
   meta: {
     season: season,
     round_id: roundID,
@@ -160,7 +184,6 @@ return {
     home_team: { id: homeID, name: home_name },
     away_team: { id: awayID, name: away_name }
   },
-  // Cleaned Pre-Match Stats (Stats available BEFORE the match starts)
   pre_match_stats: {
     ppg: {
       home: parseFloat(pre_match_home_ppg) || 0,
@@ -171,9 +194,7 @@ return {
       away: parseFloat(team_b_xg_prematch) || 0
     }
   },
-  // Normalized Odds (Max/Avg)
   odds: extracted_odds,
-  // H2H Summary (Raw for now, can be processed further if needed)
   h2h_summary: h2h ? {
     previous_matches_count: h2h.previous_matches_results ? h2h.previous_matches_results.totalMatches : 0,
     home_wins: h2h.previous_matches_results ? h2h.previous_matches_results.team_a_wins : 0,
@@ -181,3 +202,6 @@ return {
     draws: h2h.previous_matches_results ? h2h.previous_matches_results.draw : 0
   } : null
 };
+
+// Return array for n8n
+return [ { json: outputItem } ];
