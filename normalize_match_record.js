@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (Robust & Refined)
+// n8n Node: Match Record Normalizer (Robust & Self-Healing)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -13,7 +13,7 @@ function getInput() {
 
 const inputData = getInput();
 
-// --- 2. Data Unwrapping & Defensive Check ---
+// --- 2. Data Unwrapping ---
 let raw;
 if (inputData.response && Array.isArray(inputData.response)) {
   raw = inputData.response[0];
@@ -23,147 +23,75 @@ if (inputData.response && Array.isArray(inputData.response)) {
   raw = inputData;
 }
 
-// Defensive: Check if already normalized
-// Logic: If we have 'match_id' AND 'odds.best', we assume it's already processed.
-if (raw && raw.match_id && raw.odds && raw.odds.best) {
-    if (!raw.qa) raw.qa = {};
-    if (!raw.qa.warnings) raw.qa.warnings = [];
-    raw.qa.warnings.push("input_already_normalized");
-    // Return as-is (wrapped for n8n)
-    return [{ json: raw }];
-}
-
-// Guard: If raw FootyStats ID is missing, we can't proceed.
-if (!raw || !raw.id) {
-   // Warning instead of error to allow flow to continue if needed, or error.
-   // Given this is a specific node, returning an error object is safer.
-   return [{ json: { error: "No valid match data found (missing raw.id)", input_keys: Object.keys(inputData) } }];
-}
-
-// --- 3. Destructuring & Initial Setup ---
-const {
-  id,
-  homeID,
-  awayID,
-  date_unix,
-  season,
-  roundID,
-  game_week,
-  home_name,
-  away_name,
-  status,
-  h2h,
-  odds_comparison,
-  stadium_name,
-  home_image,
-  away_image,
-  // Stats for Signals
-  pre_match_home_ppg,
-  pre_match_away_ppg,
-  team_a_xg_prematch,
-  team_b_xg_prematch,
-  total_xg_prematch,
-  home_ppg,
-  away_ppg
-} = raw;
-
-// QA Container
-const qa = {
-  markets_total: 0,
-  markets_from_flat_only: [],
-  markets_from_comparison_only: [],
-  markets_merged: [],
-  markets_skipped_invalid: 0,
-  warnings: []
-};
-
-// --- 4. Helpers ---
-
-function isValidOdds(val) {
-  if (val === undefined || val === null || val === "") return false;
-  const n = Number(val);
-  return Number.isFinite(n) && n > 1.0;
-}
-
-function normalizePercent(val) {
-  if (val === undefined || val === null) return null;
-  const n = Number(val);
-  if (!Number.isFinite(n)) return null;
-  if (n > 1) return Number((n / 100).toFixed(4));
-  return Number(n.toFixed(4));
-}
-
-// --- 5. Mapping Logic (Market Keys) ---
-
-// A) Flat Field Mapping
-const FLAT_ODDS_MAP = {
-  "odds_ft_1": "ft_1x2_home",
-  "odds_ft_x": "ft_1x2_draw",
-  "odds_ft_2": "ft_1x2_away",
-  "odds_ft_over05": "ft_goals_over_0.5",
-  "odds_ft_under05": "ft_goals_under_0.5",
-  "odds_ft_over15": "ft_goals_over_1.5",
-  "odds_ft_under15": "ft_goals_under_1.5",
-  "odds_ft_over25": "ft_goals_over_2.5",
-  "odds_ft_under25": "ft_goals_under_2.5",
-  "odds_ft_over35": "ft_goals_over_3.5",
-  "odds_ft_under35": "ft_goals_under_3.5",
-  "odds_ft_over45": "ft_goals_over_4.5",
-  "odds_ft_under45": "ft_goals_under_4.5",
-  "odds_btts_yes": "btts_yes",
-  "odds_btts_no": "btts_no",
-  "odds_doublechance_1x": "dc_1x",
-  "odds_doublechance_12": "dc_12",
-  "odds_doublechance_x2": "dc_x2",
-  "odds_dnb_1": "dnb_home",
-  "odds_dnb_2": "dnb_away",
-  "odds_1st_half_result_1": "ht_1x2_home",
-  "odds_1st_half_result_x": "ht_1x2_draw",
-  "odds_1st_half_result_2": "ht_1x2_away",
-  "odds_1st_half_over05": "ht_goals_over_0.5",
-  "odds_1st_half_under05": "ht_goals_under_0.5",
-  "odds_1st_half_over15": "ht_goals_over_1.5",
-  "odds_1st_half_under15": "ht_goals_under_1.5",
-  "odds_1st_half_over25": "ht_goals_over_2.5",
-  "odds_1st_half_under25": "ht_goals_under_2.5",
-  "odds_1st_half_over35": "ht_goals_over_3.5",
-  "odds_1st_half_under35": "ht_goals_under_3.5",
-  "odds_2nd_half_result_1": "2h_1x2_home",
-  "odds_2nd_half_result_x": "2h_1x2_draw",
-  "odds_2nd_half_result_2": "2h_1x2_away",
-  "odds_2nd_half_over05": "2h_goals_over_0.5",
-  "odds_2nd_half_under05": "2h_goals_under_0.5",
-  "odds_2nd_half_over15": "2h_goals_over_1.5",
-  "odds_2nd_half_under15": "2h_goals_under_1.5",
-  "odds_2nd_half_over25": "2h_goals_over_2.5",
-  "odds_2nd_half_under25": "2h_goals_under_2.5",
-  "odds_2nd_half_over35": "2h_goals_over_3.5",
-  "odds_2nd_half_under35": "2h_goals_under_3.5",
-  "odds_btts_1st_half_yes": "ht_btts_yes",
-  "odds_btts_1st_half_no": "ht_btts_no",
-  "odds_btts_2nd_half_yes": "2h_btts_yes",
-  "odds_btts_2nd_half_no": "2h_btts_no",
-  "odds_team_to_score_first_1": "fgs_home",
-  "odds_team_to_score_first_x": "fgs_none",
-  "odds_team_to_score_first_2": "fgs_away",
-  "odds_win_to_nil_1": "win_to_nil_home",
-  "odds_win_to_nil_2": "win_to_nil_away",
-  "odds_team_a_cs_yes": "cs_home_yes",
-  "odds_team_a_cs_no": "cs_home_no",
-  "odds_team_b_cs_yes": "cs_away_yes",
-  "odds_team_b_cs_no": "cs_away_no",
-  "odds_corners_1": "corners_1x2_home",
-  "odds_corners_x": "corners_1x2_draw",
-  "odds_corners_2": "corners_1x2_away",
-};
-
-const FLAT_REGEX_MAP = [
-  // Renamed per request: corners_goals -> corners_ou
-  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` },
-  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_ou_under_${m[1]/10}` },
-];
-
+// --- 3. Helpers ---
 function flatKeyToMarketKey(flatKey) {
+  // A) Flat Field Mapping
+  const FLAT_ODDS_MAP = {
+    "odds_ft_1": "ft_1x2_home",
+    "odds_ft_x": "ft_1x2_draw",
+    "odds_ft_2": "ft_1x2_away",
+    "odds_ft_over05": "ft_goals_over_0.5",
+    "odds_ft_under05": "ft_goals_under_0.5",
+    "odds_ft_over15": "ft_goals_over_1.5",
+    "odds_ft_under15": "ft_goals_under_1.5",
+    "odds_ft_over25": "ft_goals_over_2.5",
+    "odds_ft_under25": "ft_goals_under_2.5",
+    "odds_ft_over35": "ft_goals_over_3.5",
+    "odds_ft_under35": "ft_goals_under_3.5",
+    "odds_ft_over45": "ft_goals_over_4.5",
+    "odds_ft_under45": "ft_goals_under_4.5",
+    "odds_btts_yes": "btts_yes",
+    "odds_btts_no": "btts_no",
+    "odds_doublechance_1x": "dc_1x",
+    "odds_doublechance_12": "dc_12",
+    "odds_doublechance_x2": "dc_x2",
+    "odds_dnb_1": "dnb_home",
+    "odds_dnb_2": "dnb_away",
+    "odds_1st_half_result_1": "ht_1x2_home",
+    "odds_1st_half_result_x": "ht_1x2_draw",
+    "odds_1st_half_result_2": "ht_1x2_away",
+    "odds_1st_half_over05": "ht_goals_over_0.5",
+    "odds_1st_half_under05": "ht_goals_under_0.5",
+    "odds_1st_half_over15": "ht_goals_over_1.5",
+    "odds_1st_half_under15": "ht_goals_under_1.5",
+    "odds_1st_half_over25": "ht_goals_over_2.5",
+    "odds_1st_half_under25": "ht_goals_under_2.5",
+    "odds_1st_half_over35": "ht_goals_over_3.5",
+    "odds_1st_half_under35": "ht_goals_under_3.5",
+    "odds_2nd_half_result_1": "2h_1x2_home",
+    "odds_2nd_half_result_x": "2h_1x2_draw",
+    "odds_2nd_half_result_2": "2h_1x2_away",
+    "odds_2nd_half_over05": "2h_goals_over_0.5",
+    "odds_2nd_half_under05": "2h_goals_under_0.5",
+    "odds_2nd_half_over15": "2h_goals_over_1.5",
+    "odds_2nd_half_under15": "2h_goals_under_1.5",
+    "odds_2nd_half_over25": "2h_goals_over_2.5",
+    "odds_2nd_half_under25": "2h_goals_under_2.5",
+    "odds_2nd_half_over35": "2h_goals_over_3.5",
+    "odds_2nd_half_under35": "2h_goals_under_3.5",
+    "odds_btts_1st_half_yes": "ht_btts_yes",
+    "odds_btts_1st_half_no": "ht_btts_no",
+    "odds_btts_2nd_half_yes": "2h_btts_yes",
+    "odds_btts_2nd_half_no": "2h_btts_no",
+    "odds_team_to_score_first_1": "fgs_home",
+    "odds_team_to_score_first_x": "fgs_none",
+    "odds_team_to_score_first_2": "fgs_away",
+    "odds_win_to_nil_1": "win_to_nil_home",
+    "odds_win_to_nil_2": "win_to_nil_away",
+    "odds_team_a_cs_yes": "cs_home_yes",
+    "odds_team_a_cs_no": "cs_home_no",
+    "odds_team_b_cs_yes": "cs_away_yes",
+    "odds_team_b_cs_no": "cs_away_no",
+    "odds_corners_1": "corners_1x2_home",
+    "odds_corners_x": "corners_1x2_draw",
+    "odds_corners_2": "corners_1x2_away",
+  };
+
+  const FLAT_REGEX_MAP = [
+    { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` },
+    { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_ou_under_${m[1]/10}` },
+  ];
+
   if (FLAT_ODDS_MAP[flatKey]) return FLAT_ODDS_MAP[flatKey];
   for (const r of FLAT_REGEX_MAP) {
     const match = flatKey.match(r.pattern);
@@ -172,7 +100,6 @@ function flatKeyToMarketKey(flatKey) {
   return null;
 }
 
-// B) Comparison Mapping
 function toMarketKey(category, selection) {
   const c = category.trim();
   const s = selection.trim();
@@ -242,11 +169,11 @@ function toMarketKey(category, selection) {
   if (c === "Corners") {
     if (sl.startsWith("over")) {
       const line = sl.replace("over", "").trim();
-      return `corners_ou_over_${line}`; // Renamed
+      return `corners_ou_over_${line}`;
     }
     if (sl.startsWith("under")) {
       const line = sl.replace("under", "").trim();
-      return `corners_ou_under_${line}`; // Renamed
+      return `corners_ou_under_${line}`;
     }
   }
   if (c === "Corners 1X2" || c === "Corner Match Bet") {
@@ -273,6 +200,115 @@ function toMarketKey(category, selection) {
 
   return null;
 }
+
+function generateGroups(bestOdds) {
+  const groups = {
+    "ft_1x2": ["ft_1x2_home", "ft_1x2_draw", "ft_1x2_away"],
+    "ht_1x2": ["ht_1x2_home", "ht_1x2_draw", "ht_1x2_away"],
+    "2h_1x2": ["2h_1x2_home", "2h_1x2_draw", "2h_1x2_away"],
+    "dc": ["dc_1x", "dc_12", "dc_x2"],
+    "btts": ["btts_yes", "btts_no"],
+    "ht_btts": ["ht_btts_yes", "ht_btts_no"],
+    "2h_btts": ["2h_btts_yes", "2h_btts_no"],
+    "dnb": ["dnb_home", "dnb_away"],
+    "cs_home": ["cs_home_yes", "cs_home_no"],
+    "cs_away": ["cs_away_yes", "cs_away_no"],
+    "corners_1x2": ["corners_1x2_home", "corners_1x2_draw", "corners_1x2_away"]
+  };
+
+  const keys = Object.keys(bestOdds);
+  keys.forEach(key => {
+    // Goals O/U
+    const goalMatch = key.match(/^(ft|ht|2h)_goals_(over|under)_([\d.]+)$/);
+    if (goalMatch) {
+      const [_, period, type, line] = goalMatch;
+      const groupKey = `${period}_goals_${line}`;
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(key);
+    }
+    // Corners O/U
+    const cornerMatch = key.match(/^corners_ou_(over|under)_([\d.]+)$/);
+    if (cornerMatch) {
+      const [_, type, line] = cornerMatch;
+      const groupKey = `corners_ou_${line}`;
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(key);
+    }
+  });
+
+  return groups;
+}
+
+function isValidOdds(val) {
+  if (val === undefined || val === null || val === "") return false;
+  const n = Number(val);
+  return Number.isFinite(n) && n > 1.0;
+}
+
+function normalizePercent(val) {
+  if (val === undefined || val === null) return null;
+  const n = Number(val);
+  if (!Number.isFinite(n)) return null;
+  if (n > 1) return Number((n / 100).toFixed(4));
+  return Number(n.toFixed(4));
+}
+
+// --- 4. Logic Branching ---
+
+// Case A: Input is Already Normalized (Pass-through + Repair)
+if (raw && raw.match_id && raw.odds && raw.odds.best) {
+    if (!raw.qa) raw.qa = {};
+    if (!raw.qa.warnings) raw.qa.warnings = [];
+    raw.qa.warnings.push("input_already_normalized");
+
+    // Self-Healing: Generate Groups if missing
+    if (!raw.odds.groups) {
+        raw.odds.groups = generateGroups(raw.odds.best);
+        raw.qa.warnings.push("repaired_missing_groups");
+    }
+
+    return [{ json: raw }];
+}
+
+// Case B: Raw Input (Normalize)
+if (!raw || !raw.id) {
+   return [{ json: { error: "No valid match data found (missing raw.id)", input_keys: Object.keys(inputData) } }];
+}
+
+const {
+  id,
+  homeID,
+  awayID,
+  date_unix,
+  season,
+  roundID,
+  game_week,
+  home_name,
+  away_name,
+  status,
+  h2h,
+  odds_comparison,
+  stadium_name,
+  home_image,
+  away_image,
+  pre_match_home_ppg,
+  pre_match_away_ppg,
+  team_a_xg_prematch,
+  team_b_xg_prematch,
+  total_xg_prematch,
+  home_ppg,
+  away_ppg
+} = raw;
+
+// QA Container
+const qa = {
+  markets_total: 0,
+  markets_from_flat_only: [],
+  markets_from_comparison_only: [],
+  markets_merged: [],
+  markets_skipped_invalid: 0,
+  warnings: []
+};
 
 // --- 6. Odds Aggregation ---
 const flatSources = {};
@@ -351,41 +387,7 @@ for (const key of allKeys) {
 
 qa.markets_total = Object.keys(bestOdds).length;
 
-// --- 7. Market Grouping (Metadata for Devig) ---
-const oddsGroups = {
-  "ft_1x2": ["ft_1x2_home", "ft_1x2_draw", "ft_1x2_away"],
-  "ht_1x2": ["ht_1x2_home", "ht_1x2_draw", "ht_1x2_away"],
-  "2h_1x2": ["2h_1x2_home", "2h_1x2_draw", "2h_1x2_away"],
-  "dc": ["dc_1x", "dc_12", "dc_x2"],
-  "btts": ["btts_yes", "btts_no"],
-  "ht_btts": ["ht_btts_yes", "ht_btts_no"],
-  "2h_btts": ["2h_btts_yes", "2h_btts_no"],
-  "dnb": ["dnb_home", "dnb_away"],
-  "cs_home": ["cs_home_yes", "cs_home_no"],
-  "cs_away": ["cs_away_yes", "cs_away_no"],
-  "corners_1x2": ["corners_1x2_home", "corners_1x2_draw", "corners_1x2_away"]
-};
-
-// Dynamic Groups (O/U Lines)
-const marketKeys = Object.keys(bestOdds);
-marketKeys.forEach(key => {
-  // Goals O/U
-  const goalMatch = key.match(/^(ft|ht|2h)_goals_(over|under)_([\d.]+)$/);
-  if (goalMatch) {
-    const [_, period, type, line] = goalMatch;
-    const groupKey = `${period}_goals_${line}`;
-    if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
-    oddsGroups[groupKey].push(key);
-  }
-  // Corners O/U - RENAMED to corners_ou_${line}
-  const cornerMatch = key.match(/^corners_ou_(over|under)_([\d.]+)$/);
-  if (cornerMatch) {
-    const [_, type, line] = cornerMatch;
-    const groupKey = `corners_ou_${line}`; // Corrected Group Name
-    if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
-    oddsGroups[groupKey].push(key);
-  }
-});
+const oddsGroups = generateGroups(bestOdds);
 
 // --- 8. Signals & H2H Extraction ---
 
@@ -402,13 +404,11 @@ const signals = {
   potentials: {} // To be populated
 };
 
-// QA: Check Missing Signals
 if (!signals.ppg.home) qa.warnings.push("missing_ppg_home");
 if (!signals.ppg.away) qa.warnings.push("missing_ppg_away");
 if (!signals.xg.home) qa.warnings.push("missing_xg_home");
 if (!signals.xg.away) qa.warnings.push("missing_xg_away");
 
-// Normalize and extract all _potential keys from raw
 for (const key of Object.keys(raw)) {
   if (key.endsWith("_potential")) {
     const prob = normalizePercent(raw[key]);
@@ -434,12 +434,10 @@ if (h2h) {
       p_over25: normalizePercent(h2h.betting_stats?.over25Percentage),
       p_btts: normalizePercent(h2h.betting_stats?.bttsPercentage),
     },
-    // Trim history to last 5
     history_snippet: h2h.previous_matches_ids ? h2h.previous_matches_ids.slice(0, 5) : []
   };
 }
 
-// --- 9. Final Output Construction ---
 const outputItem = {
   match_id: id,
   meta: {
@@ -459,7 +457,7 @@ const outputItem = {
   signals: signals,
   odds: {
     best: bestOdds,
-    groups: oddsGroups, // Added for Devig
+    groups: oddsGroups,
     sources: {
       flat: flatSources,
       comparison: comparisonSources
