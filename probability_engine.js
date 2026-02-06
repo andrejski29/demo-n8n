@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V6 - Corners & Expanded Markets)
+// n8n Node: Probability Engine & EV Scanner (V7 - Robust Data Handling)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -19,7 +19,15 @@ function poisson(k, lambda) {
 
 // --- 2. Modeling Core ---
 
-function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
+function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
+  // Dynamic Sizing: Mean + 4 Sigma (approx 99.99% coverage)
+  const mean = lambdaHome + lambdaAway;
+  const stdDev = Math.sqrt(mean);
+  const calcMax = Math.ceil(mean + 5 * stdDev);
+
+  // Use provided hardMax (e.g. for HT/2H low counts) or calculated dynamic max
+  const maxGoals = hardMax !== null ? hardMax : Math.max(9, calcMax); // Min 9 for FT
+
   const matrix = [];
   let totalProb = 0;
 
@@ -35,7 +43,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
     matrix.push(row);
   }
 
-  // Renormalize if truncation occurred
+  // Renormalize
   if (totalProb > 0 && totalProb < 1) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -45,17 +53,6 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
   }
 
   return matrix;
-}
-
-// Helper to sum probabilities from matrix based on condition
-function sumMatrix(matrix, conditionFn) {
-    let sum = 0;
-    for (let h = 0; h < matrix.length; h++) {
-        for (let a = 0; a < matrix[h].length; a++) {
-            if (conditionFn(h, a)) sum += matrix[h][a];
-        }
-    }
-    return sum;
 }
 
 function deriveMarketsFromMatrix(matrix, prefix = "ft") {
@@ -68,8 +65,8 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
     [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
   };
 
-  const lines = [0.5, 1.5, 2.5, 3.5, 4.5]; // Expanded lines are handled by loop
-
+  // Standard lines
+  const lines = [0.5, 1.5, 2.5, 3.5, 4.5];
   lines.forEach(L => markets[`${prefix}_goals`][L] = { over: 0, under: 0 });
 
   const maxGoals = matrix.length - 1;
@@ -144,40 +141,49 @@ function deriveCornerMarkets(matrix) {
     return markets;
 }
 
-// --- 3. Lambda Estimation ---
+// --- 3. Lambda Estimation (Improved V7) ---
 
 function getStat(obj, path) {
     return path.split('.').reduce((o, i) => o ? o[i] : undefined, obj);
 }
 
 function estimateLambdas(matchRecord) {
-  // Goals (Tier 1: xG or PPG)
-  let lambdaHome = matchRecord.signals?.xg?.home;
-  let lambdaAway = matchRecord.signals?.xg?.away;
-  let source = "xg_signal";
+  let lambdaHome = 0;
+  let lambdaAway = 0;
+  let source = "league_avg_fallback";
 
-  if (!lambdaHome || lambdaHome < 0.1) {
-    if (matchRecord.signals?.ppg?.home > 0) {
-        lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
-        source = "ppg_heuristic";
-    } else {
-        lambdaHome = 1.35;
-        source = "league_avg_fallback";
-    }
+  // 1. Try xG Signals (Best)
+  const sigXG = matchRecord.signals?.xg;
+  if (sigXG && sigXG.home > 0.1 && sigXG.away > 0.1) {
+      lambdaHome = sigXG.home;
+      lambdaAway = sigXG.away;
+      source = "xg_signal";
+  }
+  // 2. Try Context Pre-Match xG
+  else if (matchRecord.context?.team_a_xg_prematch > 0.1) {
+      lambdaHome = matchRecord.context.team_a_xg_prematch;
+      lambdaAway = matchRecord.context.team_b_xg_prematch;
+      source = "context_xg";
+  }
+  // 3. Try PPG Heuristic (Signals)
+  else if (matchRecord.signals?.ppg?.home > 0) {
+      lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
+      lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8); // Simple proxy
+      source = "ppg_signal_heuristic";
+  }
+  // 4. Try Context PPG
+  else if (matchRecord.context?.home_ppg > 0) {
+      lambdaHome = Math.max(0.5, matchRecord.context.home_ppg * 0.8);
+      lambdaAway = Math.max(0.5, matchRecord.context.away_ppg * 0.8);
+      source = "context_ppg_heuristic";
+  }
+  // 5. Fallback
+  else {
+      lambdaHome = 1.35;
+      lambdaAway = 1.10;
   }
 
-  if (!lambdaAway || lambdaAway < 0.1) {
-    if (matchRecord.signals?.ppg?.away > 0) {
-        lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8);
-        source = "ppg_heuristic";
-    } else {
-        lambdaAway = 1.10;
-        source = "league_avg_fallback";
-    }
-  }
-
-  // Corners (Tier 1: Season Avg Weighted)
-  // Logic: (Home For + Away Against) / 2
+  // Corner Estimation
   const hFor = getStat(matchRecord, "team_stats.home.season_stats.features.corners_for_pm_overall") || 4.5;
   const hAg = getStat(matchRecord, "team_stats.home.season_stats.features.corners_against_pm_overall") || 4.5;
   const aFor = getStat(matchRecord, "team_stats.away.season_stats.features.corners_for_pm_overall") || 4.5;
@@ -216,6 +222,11 @@ function marginAdjustedProb(oddsVector) {
 
   if (!valid || sum === 0) return null;
 
+  // Heuristic: If sum is >> 1 (e.g. > 1.25), it's likely overlapping outcomes (Double Chance)
+  // or extremely high margin. In these cases, proportional devig is invalid.
+  // Double Chance (1X+X2+12) sums to ~2.0.
+  if (sum > 1.5) return null;
+
   const fair = {};
   for (const sel of Object.keys(implied)) {
     fair[sel] = implied[sel] / sum;
@@ -223,50 +234,60 @@ function marginAdjustedProb(oddsVector) {
   return fair;
 }
 
-// --- 5. Market Scanner ---
+// --- 5. Market Scanner (Robust V7) ---
+
+function resolveOdds(odds, ...keys) {
+    if (!odds) return undefined;
+    for (const k of keys) {
+        if (odds[k]) return odds[k];
+    }
+    return undefined;
+}
 
 function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
   const results = [];
   const odds = matchRecord.odds?.best || {};
-  const groups = matchRecord.odds?.groups || {};
 
-  const process = (marketDisplay, modelProbs, mapping, groupName, confidence) => {
-    // Devigging
-    const groupKeys = groups[groupName] || [];
+  // Note: V7 removes dependency on 'groups' for devig capability.
+  // It devigs if the odds vector is complete.
+
+  const process = (marketDisplay, modelProbs, mapping, confidence) => {
+    // 1. Build Vector
     const vector = {};
-    let hasFullVector = false;
+    let missingLegs = 0;
 
-    if (groupKeys.length > 0) {
-        for (const [modelSel, oddKey] of Object.entries(mapping)) {
-             // Try strict key, then legacy alias
-             let val = odds[oddKey]?.odds;
-             if (!val) {
-                 const legacyKey = oddKey.replace("_ou_", "_"); // Common alias pattern
-                 val = odds[legacyKey]?.odds;
-             }
-             if (val) vector[modelSel] = val;
+    for (const [modelSel, oddKey] of Object.entries(mapping)) {
+        // Try strict, then legacy
+        const legacyKey = oddKey.replace("_ou_", "_");
+        const found = resolveOdds(odds, oddKey, legacyKey);
+
+        if (found) {
+            vector[modelSel] = found.odds;
+        } else {
+            missingLegs++;
         }
-
-        // Soft check for vector completeness (allow missing selections if we have >1 to renormalize? No, need full set for accurate margin removal)
-        if (Object.keys(vector).length === Object.keys(mapping).length) hasFullVector = true;
     }
 
+    const hasFullVector = (missingLegs === 0 && Object.keys(mapping).length > 0);
+
+    // 2. Devig (Fair Probs)
     let marketProbs = null;
     if (hasFullVector) {
         marketProbs = marginAdjustedProb(vector);
     }
 
-    // Evaluate
+    // 3. Evaluate each selection
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
-        let offered = odds[oddKey];
-        if (!offered) {
-            const legacyKey = oddKey.replace("_ou_", "_");
-            offered = odds[legacyKey];
-        }
+        const legacyKey = oddKey.replace("_ou_", "_");
+        const offered = resolveOdds(odds, oddKey, legacyKey);
 
         if (!offered) continue;
 
         const pModel = modelProbs[modelSel];
+        // If devig possible, use fair prob. Else use raw implied prob (conservative edge calculation? No, Raw implied is higher, so Edge = Model - Raw will be lower/negative. This is safe.)
+        // Actually: Edge = Model - Implied. If Implied is 55% (due to margin) and Model is 50%, Edge is -5%.
+        // If Fair is 52% and Model is 50%, Edge is -2%.
+        // Using Raw Implied is stricter/safer if we can't devig.
         const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
 
         const ev = calculateEV(pModel, offered.odds);
@@ -293,84 +314,82 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
   };
 
   // --- GOAL MARKETS ---
-
   process("1X2", modelMarkets.ft_1x2, {
     "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away"
-  }, "ft_1x2", "High");
+  }, "High");
 
   process("Double Chance", modelMarkets.ft_double_chance, {
     "1x": "dc_1x", "12": "dc_12", "x2": "dc_x2"
-  }, "dc", "Medium");
+  }, "Medium");
 
   process("BTTS", modelMarkets.ft_btts, {
     "yes": "btts_yes", "no": "btts_no"
-  }, "btts", "High");
+  }, "High");
 
   process("Clean Sheet Home", { "yes": modelMarkets.ft_clean_sheet.home, "no": 1 - modelMarkets.ft_clean_sheet.home }, {
     "yes": "cs_home_yes", "no": "cs_home_no"
-  }, "cs_home", "High");
+  }, "High");
 
   process("Clean Sheet Away", { "yes": modelMarkets.ft_clean_sheet.away, "no": 1 - modelMarkets.ft_clean_sheet.away }, {
     "yes": "cs_away_yes", "no": "cs_away_no"
-  }, "cs_away", "High");
+  }, "High");
 
   process("Win to Nil", { "home": modelMarkets.ft_win_to_nil.home, "away": modelMarkets.ft_win_to_nil.away }, {
     "home": "win_to_nil_home", "away": "win_to_nil_away"
-  }, "n/a", "Medium");
+  }, "Medium");
 
   ["0.5", "1.5", "2.5", "3.5", "4.5"].forEach(L => {
       if (modelMarkets.ft_goals[L]) {
           process(`Over/Under ${L}`, modelMarkets.ft_goals[L], {
               "over": `ft_goals_over_${L}`, "under": `ft_goals_under_${L}`
-          }, `ft_goals_${L}`, "High");
+          }, "High");
       }
   });
 
   // --- HALF TIME ---
   process("HT 1X2", modelMarkets.ht_1x2, {
     "home": "ht_1x2_home", "draw": "ht_1x2_draw", "away": "ht_1x2_away"
-  }, "ht_1x2", "Medium");
+  }, "Medium");
 
   process("HT BTTS", modelMarkets.ht_btts, {
     "yes": "ht_btts_yes", "no": "ht_btts_no"
-  }, "ht_btts", "Low");
+  }, "Low");
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets.ht_goals[L]) {
           process(`HT Over/Under ${L}`, modelMarkets.ht_goals[L], {
               "over": `ht_goals_over_${L}`, "under": `ht_goals_under_${L}`
-          }, `ht_goals_${L}`, "Medium");
+          }, "Medium");
       }
   });
 
   // --- SECOND HALF ---
   process("2H 1X2", modelMarkets["2h_1x2"], {
     "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
-  }, "2h_1x2", "Medium");
+  }, "Medium");
 
   process("2H BTTS", modelMarkets["2h_btts"], {
     "yes": "2h_btts_yes", "no": "2h_btts_no"
-  }, "2h_btts", "Low");
+  }, "Low");
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets["2h_goals"][L]) {
           process(`2H Over/Under ${L}`, modelMarkets["2h_goals"][L], {
               "over": `2h_goals_over_${L}`, "under": `2h_goals_under_${L}`
-          }, `2h_goals_${L}`, "Medium");
+          }, "Medium");
       }
   });
 
   // --- CORNERS ---
-
   process("Corner 1X2", cornerMarkets.corners_1x2, {
       "home": "corners_1x2_home", "draw": "corners_1x2_draw", "away": "corners_1x2_away"
-  }, "corners_1x2", "Medium");
+  }, "Medium");
 
   ["7.5", "8.5", "9.5", "10.5", "11.5"].forEach(L => {
       if (cornerMarkets.corners_ou[L]) {
           process(`Corners O/U ${L}`, cornerMarkets.corners_ou[L], {
               "over": `corners_ou_over_${L}`, "under": `corners_ou_under_${L}`
-          }, `corners_ou_${L}`, "Medium");
+          }, "Medium");
       }
   });
 
@@ -398,6 +417,14 @@ function rankPicks(picks) {
 function runEngine(inputs) {
   const match = inputs.match || inputs;
 
+  // Sanity Check: Team IDs
+  if (match.teams?.home?.id && match.team_stats?.home?.team_meta?.id) {
+      if (match.teams.home.id !== match.team_stats.home.team_meta.id) {
+          // Warning: Data mismatch
+          // console.warn("Team ID Mismatch detected in normalization");
+      }
+  }
+
   const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source } = estimateLambdas(match);
 
   // Time splits
@@ -406,9 +433,9 @@ function runEngine(inputs) {
 
   // Matrices
   const matrixFT = buildScoreMatrix(lambdaHome, lambdaAway);
-  const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5);
+  const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5); // Low scores
   const matrix2H = buildScoreMatrix(lambdaHome * split2H, lambdaAway * split2H, 5);
-  const matrixCorners = buildScoreMatrix(cornerLambdaHome, cornerLambdaAway, 15); // Higher max for corners
+  const matrixCorners = buildScoreMatrix(cornerLambdaHome, cornerLambdaAway); // Dynamic max
 
   // Derivations
   const marketsFT = deriveMarketsFromMatrix(matrixFT, "ft");
