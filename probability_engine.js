@@ -174,33 +174,6 @@ function scanMarkets(matchRecord, modelMarkets) {
     let hasFullVector = false;
 
     if (groupKeys.length > 0) {
-        const invMap = {};
-        for(const [m, o] of Object.entries(mapping)) invMap[o] = m;
-
-        // Also map Legacy Keys if present (for vector reconstruction)
-        // Note: groupKeys contains whatever keys are available (new or legacy)
-        // We just need to check if ANY valid key for a selection exists.
-
-        let foundCount = 0;
-        // Group logic ensures groupKeys belongs to the same market concept
-        // But we need to map {oddsKey} -> {modelSelection} to build vector.
-        // Simple approach: Check mapping values.
-
-        const selectionsFound = new Set();
-
-        for (const k of groupKeys) {
-            // Find which selection this key maps to
-            const sel = Object.keys(mapping).find(s => mapping[s] === k || k === mapping[s].replace("_ou_", "_")); // rough check
-            // Better: Strict Check against mapping
-            // Note: mapping provided to 'process' typically uses NEW keys.
-            // If odds has legacy keys, we might miss them here if we only look for new keys.
-            // BUT: normalize_match_record provides NEW keys in odds.best primarily,
-            // and duplicates as legacy.
-            // So if we look up mapping[modelSel], we get the NEW key.
-            // If odds has that, great.
-        }
-
-        // Revised Devig: Just loop mapping. If odds exist, add to vector.
         for (const [modelSel, oddKey] of Object.entries(mapping)) {
              if (odds[oddKey]) {
                  vector[modelSel] = odds[oddKey].odds;
@@ -307,7 +280,8 @@ function scanMarkets(matchRecord, modelMarkets) {
       }
   });
 
-  process("2H 1X2", modelMarkets.2h_1x2, {
+  // FIX: Use Bracket Notation for numeric properties
+  process("2H 1X2", modelMarkets["2h_1x2"], {
     "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
   }, "2h_1x2", "Medium");
 
