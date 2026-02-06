@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (Production-Safe V5)
+// n8n Node: Match Record Normalizer (Production-Safe V5.1)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -14,7 +14,7 @@ function getInput() {
 const inputData = getInput();
 
 // --- 2. QA Structure & Versioning ---
-const QA_VERSION = "5.0";
+const QA_VERSION = "5.1";
 const now = new Date().toISOString();
 
 // Helper to init QA block
@@ -82,8 +82,8 @@ if (!raw || (!raw.id && !raw.match_id)) {
    return [{ json: { error: "No valid match ID found", qa } }];
 }
 
-// Canonical ID
-const matchId = raw.id || raw.match_id;
+// Canonical ID (Fix: prioritize match_id)
+const matchId = raw.match_id || raw.id;
 
 // --- 6. Helpers & Config ---
 
@@ -355,7 +355,7 @@ let usedLegacyKeys = false;
 // Process Flat Odds
 for (const key of Object.keys(raw)) {
   if (key.startsWith("odds_")) {
-    const marketMaps = flatKeyToMarketKey(key);
+    const marketMaps = flatKeyToMarketKeys(key); // Fix: Correct function name
     const val = raw[key];
 
     if (!isValidOdds(val)) {
@@ -512,7 +512,13 @@ const outputItem = {
     away: { id: awayID, name: away_name, image: away_image }
   },
   context: {
-    stadium: stadium_name
+    stadium: stadium_name,
+    home_ppg: signals.ppg.home,
+    away_ppg: signals.ppg.away,
+    team_a_xg_prematch: signals.xg.home,
+    team_b_xg_prematch: signals.xg.away,
+    total_xg_prematch: signals.xg.total,
+    ...signals.potentials
   },
   signals: signals,
   odds: {
