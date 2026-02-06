@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (Refined for EV+ Engine)
+// n8n Node: Match Record Normalizer (Robust & Refined)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -13,7 +13,7 @@ function getInput() {
 
 const inputData = getInput();
 
-// --- 2. Data Unwrapping ---
+// --- 2. Data Unwrapping & Defensive Check ---
 let raw;
 if (inputData.response && Array.isArray(inputData.response)) {
   raw = inputData.response[0];
@@ -23,8 +23,21 @@ if (inputData.response && Array.isArray(inputData.response)) {
   raw = inputData;
 }
 
+// Defensive: Check if already normalized
+// Logic: If we have 'match_id' AND 'odds.best', we assume it's already processed.
+if (raw && raw.match_id && raw.odds && raw.odds.best) {
+    if (!raw.qa) raw.qa = {};
+    if (!raw.qa.warnings) raw.qa.warnings = [];
+    raw.qa.warnings.push("input_already_normalized");
+    // Return as-is (wrapped for n8n)
+    return [{ json: raw }];
+}
+
+// Guard: If raw FootyStats ID is missing, we can't proceed.
 if (!raw || !raw.id) {
-   return [{ json: { error: "No valid match data found", input_keys: Object.keys(inputData) } }];
+   // Warning instead of error to allow flow to continue if needed, or error.
+   // Given this is a specific node, returning an error object is safer.
+   return [{ json: { error: "No valid match data found (missing raw.id)", input_keys: Object.keys(inputData) } }];
 }
 
 // --- 3. Destructuring & Initial Setup ---
@@ -83,9 +96,6 @@ function normalizePercent(val) {
 // --- 5. Mapping Logic (Market Keys) ---
 
 // A) Flat Field Mapping
-// We use a strictly consistent naming convention:
-// - Lines are always strings in keys (e.g. "2.5")
-// - Prefixes: ft_, ht_, 2h_
 const FLAT_ODDS_MAP = {
   "odds_ft_1": "ft_1x2_home",
   "odds_ft_x": "ft_1x2_draw",
@@ -148,8 +158,9 @@ const FLAT_ODDS_MAP = {
 };
 
 const FLAT_REGEX_MAP = [
-  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_over_${m[1]/10}` },
-  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_under_${m[1]/10}` },
+  // Renamed per request: corners_goals -> corners_ou
+  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` },
+  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_ou_under_${m[1]/10}` },
 ];
 
 function flatKeyToMarketKey(flatKey) {
@@ -231,11 +242,11 @@ function toMarketKey(category, selection) {
   if (c === "Corners") {
     if (sl.startsWith("over")) {
       const line = sl.replace("over", "").trim();
-      return `corners_over_${line}`;
+      return `corners_ou_over_${line}`; // Renamed
     }
     if (sl.startsWith("under")) {
       const line = sl.replace("under", "").trim();
-      return `corners_under_${line}`;
+      return `corners_ou_under_${line}`; // Renamed
     }
   }
   if (c === "Corners 1X2" || c === "Corner Match Bet") {
@@ -366,11 +377,11 @@ marketKeys.forEach(key => {
     if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
     oddsGroups[groupKey].push(key);
   }
-  // Corners O/U
-  const cornerMatch = key.match(/^corners_(over|under)_([\d.]+)$/);
+  // Corners O/U - RENAMED to corners_ou_${line}
+  const cornerMatch = key.match(/^corners_ou_(over|under)_([\d.]+)$/);
   if (cornerMatch) {
     const [_, type, line] = cornerMatch;
-    const groupKey = `corners_goals_${line}`; // Typo in var name but logical grouping
+    const groupKey = `corners_ou_${line}`; // Corrected Group Name
     if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
     oddsGroups[groupKey].push(key);
   }
