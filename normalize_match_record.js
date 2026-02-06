@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (MatchRecord Spec)
+// n8n Node: Match Record Normalizer (Refined for EV+ Engine)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -83,6 +83,9 @@ function normalizePercent(val) {
 // --- 5. Mapping Logic (Market Keys) ---
 
 // A) Flat Field Mapping
+// We use a strictly consistent naming convention:
+// - Lines are always strings in keys (e.g. "2.5")
+// - Prefixes: ft_, ht_, 2h_
 const FLAT_ODDS_MAP = {
   "odds_ft_1": "ft_1x2_home",
   "odds_ft_x": "ft_1x2_draw",
@@ -337,7 +340,43 @@ for (const key of allKeys) {
 
 qa.markets_total = Object.keys(bestOdds).length;
 
-// --- 7. Signals & H2H Extraction ---
+// --- 7. Market Grouping (Metadata for Devig) ---
+const oddsGroups = {
+  "ft_1x2": ["ft_1x2_home", "ft_1x2_draw", "ft_1x2_away"],
+  "ht_1x2": ["ht_1x2_home", "ht_1x2_draw", "ht_1x2_away"],
+  "2h_1x2": ["2h_1x2_home", "2h_1x2_draw", "2h_1x2_away"],
+  "dc": ["dc_1x", "dc_12", "dc_x2"],
+  "btts": ["btts_yes", "btts_no"],
+  "ht_btts": ["ht_btts_yes", "ht_btts_no"],
+  "2h_btts": ["2h_btts_yes", "2h_btts_no"],
+  "dnb": ["dnb_home", "dnb_away"],
+  "cs_home": ["cs_home_yes", "cs_home_no"],
+  "cs_away": ["cs_away_yes", "cs_away_no"],
+  "corners_1x2": ["corners_1x2_home", "corners_1x2_draw", "corners_1x2_away"]
+};
+
+// Dynamic Groups (O/U Lines)
+const marketKeys = Object.keys(bestOdds);
+marketKeys.forEach(key => {
+  // Goals O/U
+  const goalMatch = key.match(/^(ft|ht|2h)_goals_(over|under)_([\d.]+)$/);
+  if (goalMatch) {
+    const [_, period, type, line] = goalMatch;
+    const groupKey = `${period}_goals_${line}`;
+    if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
+    oddsGroups[groupKey].push(key);
+  }
+  // Corners O/U
+  const cornerMatch = key.match(/^corners_(over|under)_([\d.]+)$/);
+  if (cornerMatch) {
+    const [_, type, line] = cornerMatch;
+    const groupKey = `corners_goals_${line}`; // Typo in var name but logical grouping
+    if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
+    oddsGroups[groupKey].push(key);
+  }
+});
+
+// --- 8. Signals & H2H Extraction ---
 
 const signals = {
   ppg: {
@@ -352,10 +391,15 @@ const signals = {
   potentials: {} // To be populated
 };
 
+// QA: Check Missing Signals
+if (!signals.ppg.home) qa.warnings.push("missing_ppg_home");
+if (!signals.ppg.away) qa.warnings.push("missing_ppg_away");
+if (!signals.xg.home) qa.warnings.push("missing_xg_home");
+if (!signals.xg.away) qa.warnings.push("missing_xg_away");
+
 // Normalize and extract all _potential keys from raw
 for (const key of Object.keys(raw)) {
   if (key.endsWith("_potential")) {
-    // Example: "o25_potential": 55 -> 0.55
     const prob = normalizePercent(raw[key]);
     if (prob !== null) {
       signals.potentials[key] = prob;
@@ -384,7 +428,7 @@ if (h2h) {
   };
 }
 
-// --- 8. Final Output Construction ---
+// --- 9. Final Output Construction ---
 const outputItem = {
   match_id: id,
   meta: {
@@ -401,9 +445,10 @@ const outputItem = {
   context: {
     stadium: stadium_name
   },
-  signals: signals, // Added per spec
+  signals: signals,
   odds: {
     best: bestOdds,
+    groups: oddsGroups, // Added for Devig
     sources: {
       flat: flatSources,
       comparison: comparisonSources

@@ -1,10 +1,9 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (Tier 1)
+// n8n Node: Probability Engine & EV Scanner (Refined)
 // -------------------------
 
 // --- 1. Math Helpers ---
 
-// Factorial cache for performance
 const FACTORIALS = [1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800];
 function factorial(n) {
   if (n < 0) return 1;
@@ -14,14 +13,12 @@ function factorial(n) {
   return f;
 }
 
-// Poisson Probability Mass Function: P(k; lambda) = (lambda^k * e^-lambda) / k!
 function poisson(k, lambda) {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 }
 
 // --- 2. Modeling Core (Goals) ---
 
-// Generate Scoreline Probability Matrix (e.g. 0-0 to 9-9)
 function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
   const matrix = [];
   let totalProb = 0;
@@ -38,8 +35,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
     matrix.push(row);
   }
 
-  // Normalization (handle truncation tail)
-  // Although Poisson tail is small, for betting precision we re-normalize to sum=1.0
+  // Normalize
   if (totalProb > 0 && totalProb < 1) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -52,90 +48,104 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
 }
 
 // Derive Markets from Score Matrix
-function deriveMarketsFromMatrix(matrix) {
+function deriveMarketsFromMatrix(matrix, prefix = "ft") {
   const markets = {
-    "1X2": { home: 0, draw: 0, away: 0 },
-    "btts": { yes: 0, no: 0 },
-    "over_under": {}, // Will populate dynamic lines
-    "clean_sheet": { home: 0, away: 0 },
-    "double_chance": { "1x": 0, "12": 0, "x2": 0 },
-    "correct_score": {} // Top scores
+    [`${prefix}_1x2`]: { home: 0, draw: 0, away: 0 },
+    [`${prefix}_btts`]: { yes: 0, no: 0 },
+    [`${prefix}_goals`]: {},
+    [`${prefix}_clean_sheet`]: { home: 0, away: 0 },
+    [`${prefix}_win_to_nil`]: { home: 0, away: 0 },
+    [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
   };
 
   const maxGoals = matrix.length - 1;
   const lines = [0.5, 1.5, 2.5, 3.5, 4.5];
 
-  // Initialize O/U accumulators
-  lines.forEach(L => markets.over_under[L] = { over: 0, under: 0 });
+  lines.forEach(L => markets[`${prefix}_goals`][L] = { over: 0, under: 0 });
 
   for (let h = 0; h <= maxGoals; h++) {
     for (let a = 0; a <= maxGoals; a++) {
       const p = matrix[h][a];
 
       // 1X2
-      if (h > a) markets["1X2"].home += p;
-      else if (a > h) markets["1X2"].away += p;
-      else markets["1X2"].draw += p;
+      if (h > a) {
+        markets[`${prefix}_1x2`].home += p;
+        if (a === 0) markets[`${prefix}_win_to_nil`].home += p;
+      } else if (a > h) {
+        markets[`${prefix}_1x2`].away += p;
+        if (h === 0) markets[`${prefix}_win_to_nil`].away += p;
+      } else {
+        markets[`${prefix}_1x2`].draw += p;
+      }
 
       // BTTS
-      if (h > 0 && a > 0) markets.btts.yes += p;
-      else markets.btts.no += p;
+      if (h > 0 && a > 0) markets[`${prefix}_btts`].yes += p;
+      else markets[`${prefix}_btts`].no += p;
 
-      // Clean Sheet (Home keeps clean sheet if Away=0)
-      if (a === 0) markets.clean_sheet.home += p;
-      // Away keeps clean sheet if Home=0
-      if (h === 0) markets.clean_sheet.away += p;
+      // Clean Sheet
+      if (a === 0) markets[`${prefix}_clean_sheet`].home += p;
+      if (h === 0) markets[`${prefix}_clean_sheet`].away += p;
 
       // Over/Under
       const total = h + a;
       lines.forEach(L => {
-        if (total > L) markets.over_under[L].over += p;
-        else markets.over_under[L].under += p;
+        if (total > L) markets[`${prefix}_goals`][L].over += p;
+        else markets[`${prefix}_goals`][L].under += p;
       });
     }
   }
 
-  // Double Chance Derived
-  markets.double_chance["1x"] = markets["1X2"].home + markets["1X2"].draw;
-  markets.double_chance["12"] = markets["1X2"].home + markets["1X2"].away;
-  markets.double_chance["x2"] = markets["1X2"].draw + markets["1X2"].away;
+  // Double Chance
+  markets[`${prefix}_double_chance`]["1x"] = markets[`${prefix}_1x2`].home + markets[`${prefix}_1x2`].draw;
+  markets[`${prefix}_double_chance`]["12"] = markets[`${prefix}_1x2`].home + markets[`${prefix}_1x2`].away;
+  markets[`${prefix}_double_chance`]["x2"] = markets[`${prefix}_1x2`].draw + markets[`${prefix}_1x2`].away;
 
   return markets;
 }
 
-// --- 3. Lambda Estimation (Tier 1: Simple Weighted Average) ---
-// In V1, we trust the 'pre-match xG' or 'PPG' signals provided in the MatchRecord (from FootyStats)
-// or we fall back to a simple calculation from TeamStats if available.
-function estimateLambdas(matchRecord, homeStats, awayStats) {
-  // Priority 1: Use pre-calculated xG from MatchRecord signals (FootyStats usually provides this)
+// --- 3. Lambda Estimation (Refined) ---
+function estimateLambdas(matchRecord) {
   let lambdaHome = matchRecord.signals?.xg?.home;
   let lambdaAway = matchRecord.signals?.xg?.away;
+  let source = "xg_signal";
 
-  // Fallback / Validation
-  if (!lambdaHome || lambdaHome < 0.1) lambdaHome = 1.35; // League avg fallback
-  if (!lambdaAway || lambdaAway < 0.1) lambdaAway = 1.10; // League avg fallback
+  // Fallback Logic
+  if (!lambdaHome || lambdaHome < 0.1) {
+    if (matchRecord.signals?.ppg?.home > 0) {
+        // Very rough heuristic if xG missing: PPG/1.5 approx goals
+        lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
+        source = "ppg_heuristic";
+    } else {
+        lambdaHome = 1.35; // League Avg
+        source = "league_avg_fallback";
+    }
+  }
 
-  // Clamp extreme values for safety
+  if (!lambdaAway || lambdaAway < 0.1) {
+    if (matchRecord.signals?.ppg?.away > 0) {
+        lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8);
+        source = "ppg_heuristic";
+    } else {
+        lambdaAway = 1.10;
+        source = "league_avg_fallback";
+    }
+  }
+
+  // Clamp
   lambdaHome = Math.max(0.1, Math.min(4.5, lambdaHome));
   lambdaAway = Math.max(0.1, Math.min(4.5, lambdaAway));
 
-  return { lambdaHome, lambdaAway };
+  return { lambdaHome, lambdaAway, source };
 }
 
-// --- 4. EV & Edge Calculation ---
+// --- 4. EV & Edge Calculation (Correct Devig) ---
 
 function calculateEV(pModel, odds) {
   if (!odds || odds <= 1.0) return null;
-  // EV = (Probability * DecimalOdds) - 1
   return (pModel * odds) - 1;
 }
 
 function marginAdjustedProb(oddsVector) {
-  // oddsVector: { "home": 2.2, "draw": 3.2, "away": 3.5 }
-  // Calculate implied probs: 1/odds
-  // Sum them to get book sum (e.g. 1.05)
-  // True prob = implied / sum
-
   const implied = {};
   let sum = 0;
   let valid = true;
@@ -156,113 +166,147 @@ function marginAdjustedProb(oddsVector) {
   return fair;
 }
 
-// --- 5. Market Scanner Main Loop ---
+// --- 5. Market Scanner ---
 
 function scanMarkets(matchRecord, modelMarkets) {
   const results = [];
   const odds = matchRecord.odds?.best || {};
+  const groups = matchRecord.odds?.groups || {};
 
-  // Helper to process a specific market
-  // mapping: function to map model keys to odds keys
-  const process = (marketType, modelProbs, oddsKeysMap, confidence) => {
-    // 1. Get Odds for this market group
-    // We need to reconstruct the full odds vector to devig (remove margin) correctly.
-    // This is tricky because `odds.best` is flattened.
-    // We group by "market type" manually.
-
+  // Generic Processor
+  // mapping: { modelKey: oddsKey }
+  // groupName: key in odds.groups (e.g. 'ft_1x2') to find the vector
+  const process = (marketDisplay, modelProbs, mapping, groupName, confidence) => {
+    // 1. Build Vector from Group
+    const groupKeys = groups[groupName] || [];
     const vector = {};
-    let hasOdds = false;
 
-    // Build vector for devig
-    for (const [modelSel, oddKey] of Object.entries(oddsKeysMap)) {
-      if (odds[oddKey]?.odds) {
-        vector[modelSel] = odds[oddKey].odds;
-        hasOdds = true;
-      }
+    // Check if we have odds for this group
+    let hasFullVector = false;
+    if (groupKeys.length > 0) {
+        // We need to map back from oddsKey to modelKey to build vector { home: 2.2, draw: 3.3 ... }
+        // Invert mapping for lookup: oddsKey -> modelKey
+        const invMap = {};
+        for(const [m, o] of Object.entries(mapping)) invMap[o] = m;
+
+        let foundCount = 0;
+        for (const k of groupKeys) {
+            if (odds[k] && invMap[k]) {
+                vector[invMap[k]] = odds[k].odds;
+                foundCount++;
+            }
+        }
+        // We ideally need the full vector to devig accurately.
+        // For 2-way, need 2. For 3-way, need 3.
+        const required = Object.keys(mapping).length;
+        if (foundCount === required) hasFullVector = true;
     }
 
-    if (!hasOdds) return;
+    // 2. Devig
+    let marketProbs = null;
+    if (hasFullVector) {
+        marketProbs = marginAdjustedProb(vector);
+    }
 
-    // Calculate Fair Market Probabilities (Devig)
-    const marketProbs = marginAdjustedProb(vector); // Returns { modelSel: p_fair } or null
+    // 3. Evaluate
+    for (const [modelSel, oddKey] of Object.entries(mapping)) {
+        const offered = odds[oddKey];
+        if (!offered) continue;
 
-    // Evaluate each selection
-    for (const [modelSel, oddKey] of Object.entries(oddsKeysMap)) {
-      const offeredOddsObj = odds[oddKey];
-      if (!offeredOddsObj) continue;
+        const pModel = modelProbs[modelSel];
+        // If we couldn't devig (partial odds), use raw implied (conservative)
+        const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
 
-      const offeredOdds = offeredOddsObj.odds;
-      const pModel = modelProbs[modelSel];
-      const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offeredOdds); // Fallback if full vector missing
+        const ev = calculateEV(pModel, offered.odds);
+        const edge = pModel - pMarket;
 
-      // EV Calculation
-      const ev = calculateEV(pModel, offeredOdds);
-      const edge = pModel - pMarket;
-
-      if (ev !== null && ev > 0) { // Only keep positive EV
-        results.push({
-          market: marketType,
-          selection: modelSel,
-          odds: offeredOdds,
-          p_model: Number(pModel.toFixed(4)),
-          p_market: Number(pMarket.toFixed(4)),
-          edge: Number(edge.toFixed(4)),
-          ev: Number(ev.toFixed(4)),
-          confidence: confidence,
-          source: offeredOddsObj.source
-        });
-      }
+        if (ev !== null && ev > 0) {
+            results.push({
+                market: marketDisplay,
+                selection: modelSel,
+                odds: offered.odds,
+                p_model: Number(pModel.toFixed(4)),
+                p_market: Number(pMarket.toFixed(4)),
+                edge: Number(edge.toFixed(4)),
+                ev: Number(ev.toFixed(4)),
+                confidence: confidence,
+                book: offered.book,
+                why: [
+                    `Model ${Math.round(pModel*100)}% > Market ${Math.round(pMarket*100)}%`,
+                    `EV +${(ev*100).toFixed(1)}%`
+                ]
+            });
+        }
     }
   };
 
-  // --- 1X2 ---
-  process("1X2", modelMarkets["1X2"], {
-    "home": "ft_1x2_home",
-    "draw": "ft_1x2_draw",
-    "away": "ft_1x2_away"
-  }, "High");
+  // --- FT Markets ---
+  process("1X2", modelMarkets.ft_1x2, {
+    "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away"
+  }, "ft_1x2", "High");
 
-  // --- Double Chance ---
-  process("Double Chance", modelMarkets.double_chance, {
-    "1x": "dc_1x",
-    "12": "dc_12",
-    "x2": "dc_x2"
-  }, "Medium");
+  process("Double Chance", modelMarkets.ft_double_chance, {
+    "1x": "dc_1x", "12": "dc_12", "x2": "dc_x2"
+  }, "dc", "Medium");
 
-  // --- BTTS ---
-  process("BTTS", modelMarkets.btts, {
-    "yes": "btts_yes",
-    "no": "btts_no"
-  }, "High");
+  process("BTTS", modelMarkets.ft_btts, {
+    "yes": "btts_yes", "no": "btts_no"
+  }, "btts", "High");
 
-  // --- Over/Under ---
-  // Iterate lines 0.5 to 4.5
-  for (const line of ["0.5", "1.5", "2.5", "3.5", "4.5"]) {
-    if (!modelMarkets.over_under[line]) continue;
-    process(`Over/Under ${line}`, modelMarkets.over_under[line], {
-      "over": `ft_goals_over_${line}`,
-      "under": `ft_goals_under_${line}`
-    }, "High");
-  }
+  process("Clean Sheet Home", { "yes": modelMarkets.ft_clean_sheet.home, "no": 1 - modelMarkets.ft_clean_sheet.home }, {
+    "yes": "cs_home_yes", "no": "cs_home_no"
+  }, "cs_home", "High");
+
+  process("Clean Sheet Away", { "yes": modelMarkets.ft_clean_sheet.away, "no": 1 - modelMarkets.ft_clean_sheet.away }, {
+    "yes": "cs_away_yes", "no": "cs_away_no"
+  }, "cs_away", "High");
+
+  process("Win to Nil", { "home": modelMarkets.ft_win_to_nil.home, "away": modelMarkets.ft_win_to_nil.away }, {
+    "home": "win_to_nil_home", "away": "win_to_nil_away"
+  }, "n/a", "Medium"); // No strict group for WinToNil usually
+
+  ["0.5", "1.5", "2.5", "3.5", "4.5"].forEach(L => {
+      if (modelMarkets.ft_goals[L]) {
+          process(`Over/Under ${L}`, modelMarkets.ft_goals[L], {
+              "over": `ft_goals_over_${L}`, "under": `ft_goals_under_${L}`
+          }, `ft_goals_${L}`, "High");
+      }
+  });
+
+  // --- HT Markets ---
+  process("HT 1X2", modelMarkets.ht_1x2, {
+    "home": "ht_1x2_home", "draw": "ht_1x2_draw", "away": "ht_1x2_away"
+  }, "ht_1x2", "Medium");
+
+  process("HT BTTS", modelMarkets.ht_btts, {
+    "yes": "ht_btts_yes", "no": "ht_btts_no"
+  }, "ht_btts", "Low"); // Low confidence on splits
+
+  ["0.5", "1.5"].forEach(L => {
+      if (modelMarkets.ht_goals[L]) {
+          process(`HT Over/Under ${L}`, modelMarkets.ht_goals[L], {
+              "over": `ht_goals_over_${L}`, "under": `ht_goals_under_${L}`
+          }, `ht_goals_${L}`, "Medium");
+      }
+  });
+
+  // --- 2H Markets ---
+  process("2H 1X2", modelMarkets.2h_1x2, {
+    "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
+  }, "2h_1x2", "Medium");
 
   return results;
 }
 
-// --- 6. Ranking Logic ---
+// --- 6. Ranking ---
 function rankPicks(picks) {
-  // Score = w1*EV + w2*Edge + ConfidenceBonus
-  // Tiering:
-  // A: EV > 0.05, High Confidence
-  // B: EV > 0.02, High/Medium
-  // C: EV > 0, Any
-
   return picks.map(p => {
     let score = (p.ev * 100) * 0.7 + (p.edge * 100) * 0.3;
     if (p.confidence === "High") score += 5;
     if (p.confidence === "Medium") score += 2;
 
     let tier = "C";
-    if (p.ev > 0.10 && p.confidence === "High") tier = "S"; // Super
+    if (p.ev > 0.10 && p.confidence === "High") tier = "S";
     else if (p.ev > 0.05 && (p.confidence === "High" || p.confidence === "Medium")) tier = "A";
     else if (p.ev > 0.02) tier = "B";
 
@@ -273,47 +317,53 @@ function rankPicks(picks) {
 // --- 7. Main Execution ---
 
 function runEngine(inputs) {
-  // Unpack inputs (Assume array of objects { match, home, away } or just match record if standalone)
-  // For n8n "Run Each", input is just the JSON.
+  const match = inputs.match || inputs;
 
-  const match = inputs.match || inputs; // 'match' object from previous step
+  // 1. Estimate Lambdas (FT)
+  const { lambdaHome, lambdaAway, source } = estimateLambdas(match);
 
-  // 1. Estimate Lambdas
-  const { lambdaHome, lambdaAway } = estimateLambdas(match);
+  // 2. Build Matrices (FT, HT, 2H)
+  // Simplified Splits for V1: 45% HT / 55% 2H
+  const split1H = 0.45;
+  const split2H = 0.55;
 
-  // 2. Build Probability Matrix
-  const matrix = buildScoreMatrix(lambdaHome, lambdaAway);
+  const matrixFT = buildScoreMatrix(lambdaHome, lambdaAway);
+  const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5);
+  const matrix2H = buildScoreMatrix(lambdaHome * split2H, lambdaAway * split2H, 5);
 
-  // 3. Derive Market Probabilities
-  const modelMarkets = deriveMarketsFromMatrix(matrix);
+  // 3. Derive Markets
+  const marketsFT = deriveMarketsFromMatrix(matrixFT, "ft");
+  const marketsHT = deriveMarketsFromMatrix(matrixHT, "ht");
+  const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
 
-  // 4. Scan for Value
-  const rawPicks = scanMarkets(match, modelMarkets);
+  const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
+
+  // 4. Scan
+  const rawPicks = scanMarkets(match, allModelMarkets);
 
   // 5. Rank
   const rankedPicks = rankPicks(rawPicks);
 
-  // 6. Format Output
+  // 6. Format
   return {
     match_id: match.match_id,
     overview: {
       teams: match.teams,
-      lambdas: { home: lambdaHome, away: lambdaAway },
+      lambdas: { home: Number(lambdaHome.toFixed(2)), away: Number(lambdaAway.toFixed(2)), source },
       probs: {
-        home_win: Number(modelMarkets["1X2"].home.toFixed(4)),
-        draw: Number(modelMarkets["1X2"].draw.toFixed(4)),
-        away_win: Number(modelMarkets["1X2"].away.toFixed(4)),
-        btts: Number(modelMarkets.btts.yes.toFixed(4)),
-        over_2_5: Number(modelMarkets.over_under["2.5"]?.over.toFixed(4))
+        home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),
+        draw: Number(marketsFT.ft_1x2.draw.toFixed(4)),
+        away_win: Number(marketsFT.ft_1x2.away.toFixed(4)),
+        btts: Number(marketsFT.ft_btts.yes.toFixed(4)),
+        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4))
       }
     },
-    scanner: rankedPicks, // Full list
-    shortlist: rankedPicks.slice(0, 5) // Top 5
+    scanner: rankedPicks,
+    shortlist: rankedPicks.slice(0, 5)
   };
 }
 
 // --- n8n Wrapper ---
-// Handle n8n item iteration
 if (typeof items !== 'undefined') {
   const results = [];
   for (const item of items) {
@@ -327,6 +377,5 @@ if (typeof items !== 'undefined') {
   }
   return results;
 } else {
-  // Export for local testing
   module.exports = { runEngine };
 }
