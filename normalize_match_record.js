@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (Production-Safe V5.1)
+// n8n Node: Match Record Normalizer (Production-Safe V5.2)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -14,7 +14,7 @@ function getInput() {
 const inputData = getInput();
 
 // --- 2. QA Structure & Versioning ---
-const QA_VERSION = "5.1";
+const QA_VERSION = "5.2"; // Bumped to force/track migration
 const now = new Date().toISOString();
 
 // Helper to init QA block
@@ -50,26 +50,107 @@ if (inputData.response && Array.isArray(inputData.response)) {
 const isAlreadyNormalized = (raw && raw.match_id && raw.odds && raw.odds.best);
 const qa = initQA(isAlreadyNormalized ? "normalized" : "raw");
 
-// --- 4. Logic Branching: Passthrough (Already Normalized) ---
+// --- 4. Logic Branching: Passthrough & MIGRATION (V5.2) ---
 if (isAlreadyNormalized) {
-    qa.status = "warning"; // Passthrough is technically a warning state (idempotency)
+    qa.status = "warning";
     qa.warnings.push("input_already_normalized");
 
-    // Preserve existing QA info if present, but wrap in new structure
+    // Preserve existing QA info if present
     if (raw.qa && raw.qa.warnings) {
         qa.warnings.push(...raw.qa.warnings);
     }
 
-    // Self-Healing: Groups
-    if (!raw.odds.groups) {
-        raw.odds.groups = generateGroups(raw.odds.best);
-        qa.warnings.push("repaired_missing_groups");
+    // --- SCHEMA MIGRATION LOGIC ---
+    let migrated = false;
+
+    // 1. Meta: roundID -> round_id
+    if (raw.meta && raw.meta.roundID !== undefined && raw.meta.round_id === undefined) {
+        raw.meta.round_id = raw.meta.roundID;
+        delete raw.meta.roundID;
+        migrated = true;
     }
+
+    // 2. Root: h2h_norm -> h2h
+    if (raw.h2h_norm && !raw.h2h) {
+        raw.h2h = raw.h2h_norm;
+        delete raw.h2h_norm;
+        migrated = true;
+    }
+
+    // 3. Context: Merge Signals if missing
+    if (raw.signals && raw.context) {
+        if (raw.signals.ppg && raw.context.home_ppg === undefined) {
+            raw.context.home_ppg = raw.signals.ppg.home;
+            raw.context.away_ppg = raw.signals.ppg.away;
+            migrated = true;
+        }
+        if (raw.signals.xg && raw.context.team_a_xg_prematch === undefined) {
+            raw.context.team_a_xg_prematch = raw.signals.xg.home;
+            raw.context.team_b_xg_prematch = raw.signals.xg.away;
+            raw.context.total_xg_prematch = raw.signals.xg.total;
+            migrated = true;
+        }
+    }
+
+    // 4. Odds Keys Migration
+    if (raw.odds && raw.odds.best) {
+        const newBest = {};
+        let oddsChanged = false;
+
+        Object.keys(raw.odds.best).forEach(key => {
+            let newKey = key;
+
+            // Map sh_ -> 2h_
+            if (key.startsWith("sh_")) newKey = key.replace("sh_", "2h_");
+
+            // Map dc keys (legacy -> canonical)
+            if (key === "dc_home_draw") newKey = "dc_1x";
+            if (key === "dc_home_away") newKey = "dc_12";
+            if (key === "dc_draw_away") newKey = "dc_x2";
+
+            // Map BTTS halves
+            if (key === "btts_1h_yes") newKey = "ht_btts_yes";
+            if (key === "btts_1h_no") newKey = "ht_btts_no";
+            if (key === "btts_2h_yes") newKey = "2h_btts_yes";
+            if (key === "btts_2h_no") newKey = "2h_btts_no";
+
+            // Add to new map
+            newBest[newKey] = raw.odds.best[key];
+            if (newKey !== key) oddsChanged = true;
+
+            // Corner Expansion (ensure new keys exist if legacy exist)
+            const cornerMatch = newKey.match(/^corners_over_([\d.]+)$/);
+            if (cornerMatch) {
+                const line = cornerMatch[1];
+                const newCornerKey = `corners_ou_over_${line}`;
+                if (!newBest[newCornerKey]) {
+                    newBest[newCornerKey] = raw.odds.best[key]; // Clone
+                    oddsChanged = true;
+                }
+            }
+            const cornerMatchUnder = newKey.match(/^corners_under_([\d.]+)$/);
+            if (cornerMatchUnder) {
+                const line = cornerMatchUnder[1];
+                const newCornerKey = `corners_ou_under_${line}`;
+                if (!newBest[newCornerKey]) {
+                    newBest[newCornerKey] = raw.odds.best[key]; // Clone
+                    oddsChanged = true;
+                }
+            }
+        });
+
+        if (oddsChanged) {
+            raw.odds.best = newBest;
+            raw.odds.groups = generateGroups(newBest); // Regenerate groups for new keys
+            migrated = true;
+        }
+    }
+
+    if (migrated) qa.warnings.push("schema_migrated_v5.2");
 
     // Assign new QA block
     raw.qa = qa;
 
-    // Output
     return [{ json: raw }];
 }
 
