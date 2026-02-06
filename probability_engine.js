@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (Compatible V5)
+// n8n Node: Probability Engine & EV Scanner (V6 - Corners & Expanded Markets)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -35,6 +35,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
     matrix.push(row);
   }
 
+  // Renormalize if truncation occurred
   if (totalProb > 0 && totalProb < 1) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -44,6 +45,17 @@ function buildScoreMatrix(lambdaHome, lambdaAway, maxGoals = 9) {
   }
 
   return matrix;
+}
+
+// Helper to sum probabilities from matrix based on condition
+function sumMatrix(matrix, conditionFn) {
+    let sum = 0;
+    for (let h = 0; h < matrix.length; h++) {
+        for (let a = 0; a < matrix[h].length; a++) {
+            if (conditionFn(h, a)) sum += matrix[h][a];
+        }
+    }
+    return sum;
 }
 
 function deriveMarketsFromMatrix(matrix, prefix = "ft") {
@@ -56,10 +68,11 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
     [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
   };
 
-  const maxGoals = matrix.length - 1;
-  const lines = [0.5, 1.5, 2.5, 3.5, 4.5];
+  const lines = [0.5, 1.5, 2.5, 3.5, 4.5]; // Expanded lines are handled by loop
 
   lines.forEach(L => markets[`${prefix}_goals`][L] = { over: 0, under: 0 });
+
+  const maxGoals = matrix.length - 1;
 
   for (let h = 0; h <= maxGoals; h++) {
     for (let a = 0; a <= maxGoals; a++) {
@@ -100,8 +113,45 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
   return markets;
 }
 
+function deriveCornerMarkets(matrix) {
+    const markets = {
+        corners_1x2: { home: 0, draw: 0, away: 0 },
+        corners_ou: {}
+    };
+
+    const lines = [7.5, 8.5, 9.5, 10.5, 11.5];
+    lines.forEach(L => markets.corners_ou[L] = { over: 0, under: 0 });
+
+    const maxCounts = matrix.length - 1;
+
+    for (let h = 0; h <= maxCounts; h++) {
+        for (let a = 0; a <= maxCounts; a++) {
+            const p = matrix[h][a];
+
+            // 1X2
+            if (h > a) markets.corners_1x2.home += p;
+            else if (a > h) markets.corners_1x2.away += p;
+            else markets.corners_1x2.draw += p;
+
+            // O/U
+            const total = h + a;
+            lines.forEach(L => {
+                if (total > L) markets.corners_ou[L].over += p;
+                else markets.corners_ou[L].under += p;
+            });
+        }
+    }
+    return markets;
+}
+
 // --- 3. Lambda Estimation ---
+
+function getStat(obj, path) {
+    return path.split('.').reduce((o, i) => o ? o[i] : undefined, obj);
+}
+
 function estimateLambdas(matchRecord) {
+  // Goals (Tier 1: xG or PPG)
   let lambdaHome = matchRecord.signals?.xg?.home;
   let lambdaAway = matchRecord.signals?.xg?.away;
   let source = "xg_signal";
@@ -126,10 +176,23 @@ function estimateLambdas(matchRecord) {
     }
   }
 
+  // Corners (Tier 1: Season Avg Weighted)
+  // Logic: (Home For + Away Against) / 2
+  const hFor = getStat(matchRecord, "team_stats.home.season_stats.features.corners_for_pm_overall") || 4.5;
+  const hAg = getStat(matchRecord, "team_stats.home.season_stats.features.corners_against_pm_overall") || 4.5;
+  const aFor = getStat(matchRecord, "team_stats.away.season_stats.features.corners_for_pm_overall") || 4.5;
+  const aAg = getStat(matchRecord, "team_stats.away.season_stats.features.corners_against_pm_overall") || 4.5;
+
+  let cornerLambdaHome = (hFor + aAg) / 2;
+  let cornerLambdaAway = (aFor + hAg) / 2;
+
+  // Clamp
   lambdaHome = Math.max(0.1, Math.min(4.5, lambdaHome));
   lambdaAway = Math.max(0.1, Math.min(4.5, lambdaAway));
+  cornerLambdaHome = Math.max(1.0, Math.min(12.0, cornerLambdaHome));
+  cornerLambdaAway = Math.max(1.0, Math.min(12.0, cornerLambdaAway));
 
-  return { lambdaHome, lambdaAway, source };
+  return { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source };
 }
 
 // --- 4. EV & Edge ---
@@ -162,7 +225,7 @@ function marginAdjustedProb(oddsVector) {
 
 // --- 5. Market Scanner ---
 
-function scanMarkets(matchRecord, modelMarkets) {
+function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
   const results = [];
   const odds = matchRecord.odds?.best || {};
   const groups = matchRecord.odds?.groups || {};
@@ -175,16 +238,16 @@ function scanMarkets(matchRecord, modelMarkets) {
 
     if (groupKeys.length > 0) {
         for (const [modelSel, oddKey] of Object.entries(mapping)) {
-             if (odds[oddKey]) {
-                 vector[modelSel] = odds[oddKey].odds;
-             } else {
-                 // Check for legacy alias?
-                 // E.g. corners_ou_over_9.5 -> corners_over_9.5
-                 const legacyKey = oddKey.replace("_ou_", "_");
-                 if (odds[legacyKey]) vector[modelSel] = odds[legacyKey].odds;
+             // Try strict key, then legacy alias
+             let val = odds[oddKey]?.odds;
+             if (!val) {
+                 const legacyKey = oddKey.replace("_ou_", "_"); // Common alias pattern
+                 val = odds[legacyKey]?.odds;
              }
+             if (val) vector[modelSel] = val;
         }
 
+        // Soft check for vector completeness (allow missing selections if we have >1 to renormalize? No, need full set for accurate margin removal)
         if (Object.keys(vector).length === Object.keys(mapping).length) hasFullVector = true;
     }
 
@@ -196,7 +259,6 @@ function scanMarkets(matchRecord, modelMarkets) {
     // Evaluate
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
         let offered = odds[oddKey];
-        // Fallback to legacy key if new key not found
         if (!offered) {
             const legacyKey = oddKey.replace("_ou_", "_");
             offered = odds[legacyKey];
@@ -230,7 +292,7 @@ function scanMarkets(matchRecord, modelMarkets) {
     }
   };
 
-  // --- Process Calls ---
+  // --- GOAL MARKETS ---
 
   process("1X2", modelMarkets.ft_1x2, {
     "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away"
@@ -264,6 +326,7 @@ function scanMarkets(matchRecord, modelMarkets) {
       }
   });
 
+  // --- HALF TIME ---
   process("HT 1X2", modelMarkets.ht_1x2, {
     "home": "ht_1x2_home", "draw": "ht_1x2_draw", "away": "ht_1x2_away"
   }, "ht_1x2", "Medium");
@@ -272,7 +335,7 @@ function scanMarkets(matchRecord, modelMarkets) {
     "yes": "ht_btts_yes", "no": "ht_btts_no"
   }, "ht_btts", "Low");
 
-  ["0.5", "1.5"].forEach(L => {
+  ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets.ht_goals[L]) {
           process(`HT Over/Under ${L}`, modelMarkets.ht_goals[L], {
               "over": `ht_goals_over_${L}`, "under": `ht_goals_under_${L}`
@@ -280,10 +343,36 @@ function scanMarkets(matchRecord, modelMarkets) {
       }
   });
 
-  // FIX: Use Bracket Notation for numeric properties
+  // --- SECOND HALF ---
   process("2H 1X2", modelMarkets["2h_1x2"], {
     "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
   }, "2h_1x2", "Medium");
+
+  process("2H BTTS", modelMarkets["2h_btts"], {
+    "yes": "2h_btts_yes", "no": "2h_btts_no"
+  }, "2h_btts", "Low");
+
+  ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
+      if (modelMarkets["2h_goals"][L]) {
+          process(`2H Over/Under ${L}`, modelMarkets["2h_goals"][L], {
+              "over": `2h_goals_over_${L}`, "under": `2h_goals_under_${L}`
+          }, `2h_goals_${L}`, "Medium");
+      }
+  });
+
+  // --- CORNERS ---
+
+  process("Corner 1X2", cornerMarkets.corners_1x2, {
+      "home": "corners_1x2_home", "draw": "corners_1x2_draw", "away": "corners_1x2_away"
+  }, "corners_1x2", "Medium");
+
+  ["7.5", "8.5", "9.5", "10.5", "11.5"].forEach(L => {
+      if (cornerMarkets.corners_ou[L]) {
+          process(`Corners O/U ${L}`, cornerMarkets.corners_ou[L], {
+              "over": `corners_ou_over_${L}`, "under": `corners_ou_under_${L}`
+          }, `corners_ou_${L}`, "Medium");
+      }
+  });
 
   return results;
 }
@@ -309,36 +398,46 @@ function rankPicks(picks) {
 function runEngine(inputs) {
   const match = inputs.match || inputs;
 
-  const { lambdaHome, lambdaAway, source } = estimateLambdas(match);
+  const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source } = estimateLambdas(match);
 
+  // Time splits
   const split1H = 0.45;
   const split2H = 0.55;
 
+  // Matrices
   const matrixFT = buildScoreMatrix(lambdaHome, lambdaAway);
   const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5);
   const matrix2H = buildScoreMatrix(lambdaHome * split2H, lambdaAway * split2H, 5);
+  const matrixCorners = buildScoreMatrix(cornerLambdaHome, cornerLambdaAway, 15); // Higher max for corners
 
+  // Derivations
   const marketsFT = deriveMarketsFromMatrix(matrixFT, "ft");
   const marketsHT = deriveMarketsFromMatrix(matrixHT, "ht");
   const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
+  const marketsCorners = deriveCornerMarkets(matrixCorners);
 
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
-  const rawPicks = scanMarkets(match, allModelMarkets);
-
+  // Scan
+  const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners);
   const rankedPicks = rankPicks(rawPicks);
 
   return {
     match_id: match.match_id,
     overview: {
       teams: match.teams,
-      lambdas: { home: Number(lambdaHome.toFixed(2)), away: Number(lambdaAway.toFixed(2)), source },
+      lambdas: {
+          goals: { home: Number(lambdaHome.toFixed(2)), away: Number(lambdaAway.toFixed(2)) },
+          corners: { home: Number(cornerLambdaHome.toFixed(2)), away: Number(cornerLambdaAway.toFixed(2)) },
+          source
+      },
       probs: {
         home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),
         draw: Number(marketsFT.ft_1x2.draw.toFixed(4)),
         away_win: Number(marketsFT.ft_1x2.away.toFixed(4)),
         btts: Number(marketsFT.ft_btts.yes.toFixed(4)),
-        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4))
+        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4)),
+        corners_over_9_5: Number(marketsCorners.corners_ou["9.5"]?.over.toFixed(4))
       }
     },
     scanner: rankedPicks,
