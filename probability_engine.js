@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V7 - Robust Data Handling)
+// n8n Node: Probability Engine & EV Scanner (V8 - Portfolio Management)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -20,13 +20,10 @@ function poisson(k, lambda) {
 // --- 2. Modeling Core ---
 
 function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
-  // Dynamic Sizing: Mean + 4 Sigma (approx 99.99% coverage)
   const mean = lambdaHome + lambdaAway;
   const stdDev = Math.sqrt(mean);
   const calcMax = Math.ceil(mean + 5 * stdDev);
-
-  // Use provided hardMax (e.g. for HT/2H low counts) or calculated dynamic max
-  const maxGoals = hardMax !== null ? hardMax : Math.max(9, calcMax); // Min 9 for FT
+  const maxGoals = hardMax !== null ? hardMax : Math.max(9, calcMax);
 
   const matrix = [];
   let totalProb = 0;
@@ -43,7 +40,6 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
     matrix.push(row);
   }
 
-  // Renormalize
   if (totalProb > 0 && totalProb < 1) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -65,7 +61,6 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
     [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
   };
 
-  // Standard lines
   const lines = [0.5, 1.5, 2.5, 3.5, 4.5];
   lines.forEach(L => markets[`${prefix}_goals`][L] = { over: 0, under: 0 });
 
@@ -75,7 +70,6 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
     for (let a = 0; a <= maxGoals; a++) {
       const p = matrix[h][a];
 
-      // 1X2
       if (h > a) {
         markets[`${prefix}_1x2`].home += p;
         if (a === 0) markets[`${prefix}_win_to_nil`].home += p;
@@ -86,15 +80,12 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
         markets[`${prefix}_1x2`].draw += p;
       }
 
-      // BTTS
       if (h > 0 && a > 0) markets[`${prefix}_btts`].yes += p;
       else markets[`${prefix}_btts`].no += p;
 
-      // Clean Sheet
       if (a === 0) markets[`${prefix}_clean_sheet`].home += p;
       if (h === 0) markets[`${prefix}_clean_sheet`].away += p;
 
-      // Over/Under
       const total = h + a;
       lines.forEach(L => {
         if (total > L) markets[`${prefix}_goals`][L].over += p;
@@ -125,12 +116,10 @@ function deriveCornerMarkets(matrix) {
         for (let a = 0; a <= maxCounts; a++) {
             const p = matrix[h][a];
 
-            // 1X2
             if (h > a) markets.corners_1x2.home += p;
             else if (a > h) markets.corners_1x2.away += p;
             else markets.corners_1x2.draw += p;
 
-            // O/U
             const total = h + a;
             lines.forEach(L => {
                 if (total > L) markets.corners_ou[L].over += p;
@@ -141,7 +130,7 @@ function deriveCornerMarkets(matrix) {
     return markets;
 }
 
-// --- 3. Lambda Estimation (Improved V7) ---
+// --- 3. Lambda Estimation ---
 
 function getStat(obj, path) {
     return path.split('.').reduce((o, i) => o ? o[i] : undefined, obj);
@@ -152,38 +141,28 @@ function estimateLambdas(matchRecord) {
   let lambdaAway = 0;
   let source = "league_avg_fallback";
 
-  // 1. Try xG Signals (Best)
   const sigXG = matchRecord.signals?.xg;
   if (sigXG && sigXG.home > 0.1 && sigXG.away > 0.1) {
       lambdaHome = sigXG.home;
       lambdaAway = sigXG.away;
       source = "xg_signal";
-  }
-  // 2. Try Context Pre-Match xG
-  else if (matchRecord.context?.team_a_xg_prematch > 0.1) {
+  } else if (matchRecord.context?.team_a_xg_prematch > 0.1) {
       lambdaHome = matchRecord.context.team_a_xg_prematch;
       lambdaAway = matchRecord.context.team_b_xg_prematch;
       source = "context_xg";
-  }
-  // 3. Try PPG Heuristic (Signals)
-  else if (matchRecord.signals?.ppg?.home > 0) {
+  } else if (matchRecord.signals?.ppg?.home > 0) {
       lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
-      lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8); // Simple proxy
+      lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8);
       source = "ppg_signal_heuristic";
-  }
-  // 4. Try Context PPG
-  else if (matchRecord.context?.home_ppg > 0) {
+  } else if (matchRecord.context?.home_ppg > 0) {
       lambdaHome = Math.max(0.5, matchRecord.context.home_ppg * 0.8);
       lambdaAway = Math.max(0.5, matchRecord.context.away_ppg * 0.8);
       source = "context_ppg_heuristic";
-  }
-  // 5. Fallback
-  else {
+  } else {
       lambdaHome = 1.35;
       lambdaAway = 1.10;
   }
 
-  // Corner Estimation
   const hFor = getStat(matchRecord, "team_stats.home.season_stats.features.corners_for_pm_overall") || 4.5;
   const hAg = getStat(matchRecord, "team_stats.home.season_stats.features.corners_against_pm_overall") || 4.5;
   const aFor = getStat(matchRecord, "team_stats.away.season_stats.features.corners_for_pm_overall") || 4.5;
@@ -192,7 +171,6 @@ function estimateLambdas(matchRecord) {
   let cornerLambdaHome = (hFor + aAg) / 2;
   let cornerLambdaAway = (aFor + hAg) / 2;
 
-  // Clamp
   lambdaHome = Math.max(0.1, Math.min(4.5, lambdaHome));
   lambdaAway = Math.max(0.1, Math.min(4.5, lambdaAway));
   cornerLambdaHome = Math.max(1.0, Math.min(12.0, cornerLambdaHome));
@@ -208,6 +186,14 @@ function calculateEV(pModel, odds) {
   return (pModel * odds) - 1;
 }
 
+function calculateKelly(p, odds, fraction = 0.25) {
+    if (!odds || odds <= 1) return 0;
+    const b = odds - 1;
+    const q = 1 - p;
+    const f = (b * p - q) / b;
+    return Math.max(0, f * fraction); // Quarter Kelly is safer
+}
+
 function marginAdjustedProb(oddsVector) {
   const implied = {};
   let sum = 0;
@@ -221,11 +207,7 @@ function marginAdjustedProb(oddsVector) {
   }
 
   if (!valid || sum === 0) return null;
-
-  // Heuristic: If sum is >> 1 (e.g. > 1.25), it's likely overlapping outcomes (Double Chance)
-  // or extremely high margin. In these cases, proportional devig is invalid.
-  // Double Chance (1X+X2+12) sums to ~2.0.
-  if (sum > 1.5) return null;
+  if (sum > 1.5) return null; // Skip non-exclusive markets (Double Chance)
 
   const fair = {};
   for (const sel of Object.keys(implied)) {
@@ -234,7 +216,7 @@ function marginAdjustedProb(oddsVector) {
   return fair;
 }
 
-// --- 5. Market Scanner (Robust V7) ---
+// --- 5. Market Scanner ---
 
 function resolveOdds(odds, ...keys) {
     if (!odds) return undefined;
@@ -248,35 +230,23 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
   const results = [];
   const odds = matchRecord.odds?.best || {};
 
-  // Note: V7 removes dependency on 'groups' for devig capability.
-  // It devigs if the odds vector is complete.
-
-  const process = (marketDisplay, modelProbs, mapping, confidence) => {
-    // 1. Build Vector
+  const process = (marketDisplay, modelProbs, mapping, category, confidence) => {
     const vector = {};
     let missingLegs = 0;
 
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
-        // Try strict, then legacy
         const legacyKey = oddKey.replace("_ou_", "_");
         const found = resolveOdds(odds, oddKey, legacyKey);
-
-        if (found) {
-            vector[modelSel] = found.odds;
-        } else {
-            missingLegs++;
-        }
+        if (found) vector[modelSel] = found.odds;
+        else missingLegs++;
     }
 
     const hasFullVector = (missingLegs === 0 && Object.keys(mapping).length > 0);
-
-    // 2. Devig (Fair Probs)
     let marketProbs = null;
     if (hasFullVector) {
         marketProbs = marginAdjustedProb(vector);
     }
 
-    // 3. Evaluate each selection
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
         const legacyKey = oddKey.replace("_ou_", "_");
         const offered = resolveOdds(odds, oddKey, legacyKey);
@@ -284,24 +254,23 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
         if (!offered) continue;
 
         const pModel = modelProbs[modelSel];
-        // If devig possible, use fair prob. Else use raw implied prob (conservative edge calculation? No, Raw implied is higher, so Edge = Model - Raw will be lower/negative. This is safe.)
-        // Actually: Edge = Model - Implied. If Implied is 55% (due to margin) and Model is 50%, Edge is -5%.
-        // If Fair is 52% and Model is 50%, Edge is -2%.
-        // Using Raw Implied is stricter/safer if we can't devig.
         const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
 
         const ev = calculateEV(pModel, offered.odds);
         const edge = pModel - pMarket;
+        const kelly = calculateKelly(pModel, offered.odds, 0.2); // 20% Kelly
 
         if (ev !== null && ev > 0) {
             results.push({
                 market: marketDisplay,
                 selection: modelSel,
+                category: category, // For deduplication
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
                 p_market: Number(pMarket.toFixed(4)),
                 edge: Number(edge.toFixed(4)),
                 ev: Number(ev.toFixed(4)),
+                kelly: Number(kelly.toFixed(4)),
                 confidence: confidence,
                 book: offered.book,
                 why: [
@@ -316,114 +285,137 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
   // --- GOAL MARKETS ---
   process("1X2", modelMarkets.ft_1x2, {
     "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away"
-  }, "High");
+  }, "result", "High");
 
   process("Double Chance", modelMarkets.ft_double_chance, {
     "1x": "dc_1x", "12": "dc_12", "x2": "dc_x2"
-  }, "Medium");
+  }, "result", "Medium");
 
   process("BTTS", modelMarkets.ft_btts, {
     "yes": "btts_yes", "no": "btts_no"
-  }, "High");
+  }, "goals", "High");
 
   process("Clean Sheet Home", { "yes": modelMarkets.ft_clean_sheet.home, "no": 1 - modelMarkets.ft_clean_sheet.home }, {
     "yes": "cs_home_yes", "no": "cs_home_no"
-  }, "High");
+  }, "defense", "High");
 
   process("Clean Sheet Away", { "yes": modelMarkets.ft_clean_sheet.away, "no": 1 - modelMarkets.ft_clean_sheet.away }, {
     "yes": "cs_away_yes", "no": "cs_away_no"
-  }, "High");
+  }, "defense", "High");
 
   process("Win to Nil", { "home": modelMarkets.ft_win_to_nil.home, "away": modelMarkets.ft_win_to_nil.away }, {
     "home": "win_to_nil_home", "away": "win_to_nil_away"
-  }, "Medium");
+  }, "combo", "Medium");
 
   ["0.5", "1.5", "2.5", "3.5", "4.5"].forEach(L => {
       if (modelMarkets.ft_goals[L]) {
           process(`Over/Under ${L}`, modelMarkets.ft_goals[L], {
               "over": `ft_goals_over_${L}`, "under": `ft_goals_under_${L}`
-          }, "High");
+          }, "goals", "High");
       }
   });
 
   // --- HALF TIME ---
   process("HT 1X2", modelMarkets.ht_1x2, {
     "home": "ht_1x2_home", "draw": "ht_1x2_draw", "away": "ht_1x2_away"
-  }, "Medium");
+  }, "half_result", "Medium");
 
   process("HT BTTS", modelMarkets.ht_btts, {
     "yes": "ht_btts_yes", "no": "ht_btts_no"
-  }, "Low");
+  }, "half_goals", "Low");
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets.ht_goals[L]) {
           process(`HT Over/Under ${L}`, modelMarkets.ht_goals[L], {
               "over": `ht_goals_over_${L}`, "under": `ht_goals_under_${L}`
-          }, "Medium");
+          }, "half_goals", "Medium");
       }
   });
 
   // --- SECOND HALF ---
   process("2H 1X2", modelMarkets["2h_1x2"], {
     "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
-  }, "Medium");
+  }, "half_result", "Medium");
 
   process("2H BTTS", modelMarkets["2h_btts"], {
     "yes": "2h_btts_yes", "no": "2h_btts_no"
-  }, "Low");
+  }, "half_goals", "Low");
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets["2h_goals"][L]) {
           process(`2H Over/Under ${L}`, modelMarkets["2h_goals"][L], {
               "over": `2h_goals_over_${L}`, "under": `2h_goals_under_${L}`
-          }, "Medium");
+          }, "half_goals", "Medium");
       }
   });
 
   // --- CORNERS ---
   process("Corner 1X2", cornerMarkets.corners_1x2, {
       "home": "corners_1x2_home", "draw": "corners_1x2_draw", "away": "corners_1x2_away"
-  }, "Medium");
+  }, "corners", "Medium");
 
   ["7.5", "8.5", "9.5", "10.5", "11.5"].forEach(L => {
       if (cornerMarkets.corners_ou[L]) {
           process(`Corners O/U ${L}`, cornerMarkets.corners_ou[L], {
               "over": `corners_ou_over_${L}`, "under": `corners_ou_under_${L}`
-          }, "Medium");
+          }, "corners", "Medium");
       }
   });
 
   return results;
 }
 
-// --- 6. Ranking ---
-function rankPicks(picks) {
-  return picks.map(p => {
+// --- 6. Ranking & Portfolio ---
+
+function rankAndFilterPicks(picks, config = {}) {
+  // Score
+  const scored = picks.map(p => {
     let score = (p.ev * 100) * 0.7 + (p.edge * 100) * 0.3;
     if (p.confidence === "High") score += 5;
     if (p.confidence === "Medium") score += 2;
 
-    let tier = "C";
-    if (p.ev > 0.10 && p.confidence === "High") tier = "S";
-    else if (p.ev > 0.05 && (p.confidence === "High" || p.confidence === "Medium")) tier = "A";
-    else if (p.ev > 0.02) tier = "B";
+    // Penalty for extremely low probability (longshots) unless high EV
+    if (p.p_model < 0.30) score -= 5;
 
-    return { ...p, score: Number(score.toFixed(2)), tier };
+    return { ...p, score: Number(score.toFixed(2)) };
   }).sort((a, b) => b.score - a.score);
+
+  // Deduplicate by Category (Best pick per category)
+  // Categories: result, goals, defense, corners, half_result, half_goals
+  const categoryBest = {};
+  const diversityList = [];
+  const others = [];
+
+  for (const p of scored) {
+      if (!categoryBest[p.category]) {
+          categoryBest[p.category] = p;
+          diversityList.push(p);
+      } else {
+          others.push(p);
+      }
+  }
+
+  // Interleave: Top 1 from each category, then the rest sorted by score
+  // This ensures we show a Corner bet if it's good, even if Goals bets are slightly better.
+  const topPicks = diversityList.sort((a, b) => b.score - a.score).slice(0, 3);
+
+  // Fill remaining spots (up to 5 total)
+  const usedIds = new Set(topPicks.map(x => x.market + x.selection));
+  for (const p of scored) {
+      if (topPicks.length >= 5) break;
+      if (!usedIds.has(p.market + p.selection)) {
+          topPicks.push(p);
+          usedIds.add(p.market + p.selection);
+      }
+  }
+
+  return { all: scored, top: topPicks };
 }
 
 // --- 7. Main ---
 
-function runEngine(inputs) {
+function runEngine(inputs, config = {}) {
   const match = inputs.match || inputs;
-
-  // Sanity Check: Team IDs
-  if (match.teams?.home?.id && match.team_stats?.home?.team_meta?.id) {
-      if (match.teams.home.id !== match.team_stats.home.team_meta.id) {
-          // Warning: Data mismatch
-          // console.warn("Team ID Mismatch detected in normalization");
-      }
-  }
 
   const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source } = estimateLambdas(match);
 
@@ -431,13 +423,11 @@ function runEngine(inputs) {
   const split1H = 0.45;
   const split2H = 0.55;
 
-  // Matrices
   const matrixFT = buildScoreMatrix(lambdaHome, lambdaAway);
-  const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5); // Low scores
+  const matrixHT = buildScoreMatrix(lambdaHome * split1H, lambdaAway * split1H, 5);
   const matrix2H = buildScoreMatrix(lambdaHome * split2H, lambdaAway * split2H, 5);
-  const matrixCorners = buildScoreMatrix(cornerLambdaHome, cornerLambdaAway); // Dynamic max
+  const matrixCorners = buildScoreMatrix(cornerLambdaHome, cornerLambdaAway);
 
-  // Derivations
   const marketsFT = deriveMarketsFromMatrix(matrixFT, "ft");
   const marketsHT = deriveMarketsFromMatrix(matrixHT, "ht");
   const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
@@ -445,9 +435,8 @@ function runEngine(inputs) {
 
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
-  // Scan
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners);
-  const rankedPicks = rankPicks(rawPicks);
+  const ranked = rankAndFilterPicks(rawPicks, config);
 
   return {
     match_id: match.match_id,
@@ -467,8 +456,8 @@ function runEngine(inputs) {
         corners_over_9_5: Number(marketsCorners.corners_ou["9.5"]?.over.toFixed(4))
       }
     },
-    scanner: rankedPicks,
-    shortlist: rankedPicks.slice(0, 5)
+    top_picks: ranked.top,
+    all_value_bets: ranked.all
   };
 }
 
