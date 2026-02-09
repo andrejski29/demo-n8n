@@ -1,5 +1,3 @@
-const fs = require('fs');
-
 /**
  * Daily Picks Selector Node
  *
@@ -148,20 +146,33 @@ function generateMidCombo(pool, minOdds, maxOdds) {
     return null; // No valid combo found
 }
 
-// Execution Block (for local testing)
-if (require.main === module) {
+// ============================================================================
+// EXPORT / N8N WRAPPER
+// ============================================================================
+if (typeof items !== 'undefined' && Array.isArray(items)) {
+    // n8n Environment: Input is strictly the 'items' array
     try {
-        const rawData = fs.readFileSync('base_bets.json', 'utf8');
-        const bets = JSON.parse(rawData);
-        const portfolio = selectDailyPortfolio(bets);
+        let input = [];
+        // Robust input detection handling various n8n structures (flattened or nested)
+        if (items.length === 1 && Array.isArray(items[0].json)) {
+             input = items[0].json;
+        } else if (items.length > 0 && items[0].json && Array.isArray(items[0].json.data)) {
+             input = items[0].json.data;
+        } else {
+             // Standard n8n items list where each item is { json: { ...pick... } }
+             input = items.map(i => i.json);
+        }
 
-        console.log(JSON.stringify(portfolio, null, 2));
+        // Execute Core Logic
+        const portfolio = selectDailyPortfolio(input);
 
-        // Optional: Write output to file for inspection
-        fs.writeFileSync('daily_portfolio.json', JSON.stringify(portfolio, null, 2));
-    } catch (err) {
-        console.error("Error running selector:", err);
+        // Return wrapped json
+        return [{ json: portfolio }];
+    } catch (e) {
+        return [{ json: { error: e.message, stack: e.stack } }];
     }
 }
 
-module.exports = { selectDailyPortfolio };
+if (typeof module !== 'undefined') {
+    module.exports = { selectDailyPortfolio };
+}
