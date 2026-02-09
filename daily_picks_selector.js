@@ -1,11 +1,10 @@
 /**
- * Daily Picks Selector Node (v2.1 - Fixes & Quality Assurance)
+ * Daily Picks Selector Node (v2.3 - Final Refinement)
  *
- * Changelog v2.1:
- * - Fixed Date Grouping (Robust UTC Date parsing)
- * - Added Combo Reuse Policy (Prevent starvation on small slates)
- * - Improved Deduplication Logic (Strict P > Conf > Sort order)
- * - Tuned Mid Combo Search (Prioritize 3-leg stability)
+ * Changelog v2.3:
+ * - Date Parsing: Prefer string slice for 'YYYY-MM-DD' input.
+ * - Reuse Policy: Strict implementation of 'none', 'core_only', 'full'.
+ * - Mid Combo: Full pool search with strict 'Max 1 Single' limit.
  */
 
 // ============================================================================
@@ -44,8 +43,9 @@ const CONFIG = {
 
     // 4. COMBOS
     combos: {
-        allow_reuse_singles: true, // Allow reusing singles in combos
         reuse_policy: "core_only", // "none" | "core_only" | "full"
+        mid_combo_max_reuse: 1,    // Max 1 reused single allowed in Mid Combo
+
         core_double: {
             max_leg_odds: 2.20
         },
@@ -64,8 +64,6 @@ const CONFIG = {
 
 /**
  * Main Entry Point
- * @param {Array} allBets - Flat list of bet objects
- * @returns {Array} - Array of Daily Portfolio Objects
  */
 function selectDailyPortfolio(allBets) {
     // 1. Group by Day (UTC YYYY-MM-DD)
@@ -76,32 +74,31 @@ function selectDailyPortfolio(allBets) {
 
         let dayKey = "UNKNOWN";
         try {
-            // Normalize spaces to T for standard ISO parsing if needed
-            const normDate = bet.date_iso.replace(' ', 'T');
-            const d = new Date(normDate);
-            if (!isNaN(d.getTime())) {
-                // Extract YYYY-MM-DD in UTC
-                dayKey = d.toISOString().split('T')[0];
-            } else {
-                // Fallback: simple string split if already roughly ISO
+            // Safer Parsing: Check for YYYY-MM-DD at start
+            if (/^\d{4}-\d{2}-\d{2}/.test(bet.date_iso)) {
                 dayKey = bet.date_iso.substring(0, 10);
+            } else {
+                // Fallback to Date object parsing
+                const d = new Date(bet.date_iso);
+                if (!isNaN(d.getTime())) {
+                    dayKey = d.toISOString().split('T')[0];
+                }
             }
         } catch (e) {
             dayKey = "INVALID_DATE";
         }
 
-        if (!betsByDay[dayKey]) betsByDay[dayKey] = [];
-        betsByDay[dayKey].push(bet);
+        if (dayKey !== "UNKNOWN" && dayKey !== "INVALID_DATE") {
+            if (!betsByDay[dayKey]) betsByDay[dayKey] = [];
+            betsByDay[dayKey].push(bet);
+        }
     });
 
     const dailyPortfolios = [];
 
     // 2. Process Each Day Independently
     Object.keys(betsByDay).sort().forEach(day => {
-        if (day === 'INVALID_DATE' || day === 'UNKNOWN') return;
-
-        const dayBets = betsByDay[day];
-        const portfolio = processDay(day, dayBets);
+        const portfolio = processDay(day, betsByDay[day]);
         if (portfolio) {
             dailyPortfolios.push(portfolio);
         }
@@ -114,35 +111,17 @@ function selectDailyPortfolio(allBets) {
  * Process a single day's bets into a portfolio
  */
 function processDay(day, bets) {
-    // A. Filter & Classify Candidates
-    const candidates = {
-        core: [],
-        value: [],
-        high_pot: []
-    };
+    // A. Filter & Classify
+    const candidates = { core: [], value: [], high_pot: [] };
 
     bets.forEach(bet => {
-        // Enforce EV > 0 globally (or per config)
         if (bet.ev <= 0) return;
-
-        // Check CORE
-        if (checkTier(bet, CONFIG.core)) {
-            candidates.core.push(bet);
-        }
-        // Check VALUE
-        else if (checkTier(bet, CONFIG.value)) {
-            candidates.value.push(bet);
-        }
-        // Check HIGH POTENTIAL
-        else if (checkTier(bet, CONFIG.high_pot)) {
-            candidates.high_pot.push(bet);
-        }
-        // Else discard (Longshots / Low quality)
+        if (checkTier(bet, CONFIG.core)) candidates.core.push(bet);
+        else if (checkTier(bet, CONFIG.value)) candidates.value.push(bet);
+        else if (checkTier(bet, CONFIG.high_pot)) candidates.high_pot.push(bet);
     });
 
-    // B. Deduplicate Matches (Pick Best per Match)
-    // Strategy: Consolidate all candidates, Group by Match, Pick Safest (Highest Probability)
-
+    // B. Deduplicate (Best per Match)
     const allCandidates = [
         ...candidates.core.map(b => ({ ...b, _tier: 'core' })),
         ...candidates.value.map(b => ({ ...b, _tier: 'value' })),
@@ -155,7 +134,7 @@ function processDay(day, bets) {
         if (!existing) {
             bestPerMatch[bet.match_id] = bet;
         } else {
-            // Strict Tie-Breaker: P > Conf > SortScore > EV
+            // Priority: P > Conf > SortScore > EV
             if (bet.p_model > existing.p_model) {
                 bestPerMatch[bet.match_id] = bet;
             } else if (bet.p_model === existing.p_model) {
@@ -170,111 +149,95 @@ function processDay(day, bets) {
         }
     });
 
-    // C. Re-Distribute into Tiers (Limit & Sort)
-    const selectedTiers = {
-        core: [],
-        value: [],
-        high_pot: []
-    };
-
-    // Sort function: Prob Desc > Conf Desc > SortScore Desc
+    // C. Select Singles
+    const selectedTiers = { core: [], value: [], high_pot: [] };
     const sorter = (a, b) => {
         if (b.p_model !== a.p_model) return b.p_model - a.p_model;
         if (b.confidence_score !== a.confidence_score) return b.confidence_score - a.confidence_score;
         return b.sort_score - a.sort_score;
     };
 
-    Object.values(bestPerMatch).forEach(bet => {
-        selectedTiers[bet._tier].push(bet);
-    });
+    Object.values(bestPerMatch).forEach(bet => selectedTiers[bet._tier].push(bet));
 
-    // Apply Limits
     const finalCore = selectedTiers.core.sort(sorter).slice(0, CONFIG.core.limit_count);
     const finalValue = selectedTiers.value.sort(sorter).slice(0, CONFIG.value.limit_count);
     const finalHighPot = selectedTiers.high_pot.sort(sorter).slice(0, CONFIG.high_pot.limit_count);
 
-    // D. Generate Combos with Reuse Policy
-    // Reuse Strategy:
-    // If 'allow_reuse_singles' is true, we allow using matches that are in singles list.
-    // However, we must ALWAYS avoid picking 2 legs from the same match in a combo.
-    // And generally we want unique legs within a combo.
+    // D. Generate Combos
 
-    // Create exclude set based on reuse policy
-    const matchesUsedInSingles = new Set([
-        ...finalCore,
-        ...finalValue,
-        ...finalHighPot
-    ].map(b => b.match_id));
+    // 1. Identify Match IDs for Reuse Policy
+    const coreIds = new Set(finalCore.map(b => b.match_id));
+    const valueIds = new Set(finalValue.map(b => b.match_id));
+    const highPotIds = new Set(finalHighPot.map(b => b.match_id));
 
-    // Base Pool: High quality legs from the deduped list
-    // We prioritize Core and Value bets for combos
+    const allSinglesIds = new Set([...coreIds, ...valueIds, ...highPotIds]);
+
+    // Determine Allowed Reuse based on Policy
+    let allowedReuseIds = new Set();
+    const policy = CONFIG.combos.reuse_policy;
+
+    if (policy === 'full') {
+        allowedReuseIds = allSinglesIds;
+    } else if (policy === 'core_only') {
+        allowedReuseIds = coreIds;
+    }
+    // 'none' leaves allowedReuseIds empty
+
+    // 2. Base Pool
+    // Full sorted pool of all deduplicated best bets per match
     const comboPool = Object.values(bestPerMatch).sort(sorter);
 
-    const combos = {
-        core_double: null,
-        smart_double: null,
-        mid_combo: null,
-        debug: []
-    };
+    const combos = { core_double: null, smart_double: null, mid_combo: null, debug: [] };
+    const comboUsedMatches = new Set(); // Matches used in *other* combos
 
-    // Helper to get candidates respecting exclusion
-    const getCandidates = (pool, excludeIds, maxOdds, minOdds = 0) => {
-        return pool.filter(b =>
-            !excludeIds.has(b.match_id) &&
+    // Helper: Filter candidates for Doubles (Strict Policy Enforcement)
+    const getDoubleCandidates = (maxOdds) => {
+        return comboPool.filter(b =>
+            !comboUsedMatches.has(b.match_id) && // Unique across combos
             b.odds <= maxOdds &&
-            b.odds >= minOdds
+            // Reuse Logic: Allowed if (Not in Singles) OR (In Allowed Reuse Set)
+            (!allSinglesIds.has(b.match_id) || allowedReuseIds.has(b.match_id))
         );
     };
 
-    // Determine exclusion set for combos
-    let baseExclude = new Set();
-    if (!CONFIG.combos.allow_reuse_singles) {
-        baseExclude = new Set(matchesUsedInSingles);
-    }
-    // If reuse allowed, we start with empty exclude (but track usage to update)
-
-    // 1. CORE DOUBLE (2 legs, safer)
-    const coreDoubleCandidates = getCandidates(comboPool, baseExclude, CONFIG.combos.core_double.max_leg_odds);
-    if (coreDoubleCandidates.length >= 2) {
+    // --- CORE DOUBLE ---
+    let pool = getDoubleCandidates(CONFIG.combos.core_double.max_leg_odds);
+    if (pool.length >= 2) {
         combos.core_double = {
             type: "CORE DOUBLE",
-            legs: [coreDoubleCandidates[0], coreDoubleCandidates[1]],
-            total_odds: parseFloat((coreDoubleCandidates[0].odds * coreDoubleCandidates[1].odds).toFixed(2))
+            legs: [pool[0], pool[1]],
+            total_odds: parseFloat((pool[0].odds * pool[1].odds).toFixed(2))
         };
-        // Mark used so Smart Double doesn't reuse the exact same legs?
-        // Usually good to avoid duplicate combos.
-        baseExclude.add(coreDoubleCandidates[0].match_id);
-        baseExclude.add(coreDoubleCandidates[1].match_id);
-    } else {
-        combos.debug.push("Not enough legs for Core Double");
+        comboUsedMatches.add(pool[0].match_id);
+        comboUsedMatches.add(pool[1].match_id);
     }
 
-    // 2. SMART DOUBLE (2 legs, <= 2.60)
-    const smartDoubleCandidates = getCandidates(comboPool, baseExclude, CONFIG.combos.smart_double.max_leg_odds);
-    if (smartDoubleCandidates.length >= 2) {
+    // --- SMART DOUBLE ---
+    pool = getDoubleCandidates(CONFIG.combos.smart_double.max_leg_odds);
+    if (pool.length >= 2) {
         combos.smart_double = {
             type: "SMART DOUBLE",
-            legs: [smartDoubleCandidates[0], smartDoubleCandidates[1]],
-            total_odds: parseFloat((smartDoubleCandidates[0].odds * smartDoubleCandidates[1].odds).toFixed(2))
+            legs: [pool[0], pool[1]],
+            total_odds: parseFloat((pool[0].odds * pool[1].odds).toFixed(2))
         };
-        baseExclude.add(smartDoubleCandidates[0].match_id);
-        baseExclude.add(smartDoubleCandidates[1].match_id);
-    } else {
-        combos.debug.push("Not enough legs for Smart Double");
+        comboUsedMatches.add(pool[0].match_id);
+        comboUsedMatches.add(pool[1].match_id);
     }
 
-    // 3. MID COMBO (2-3 legs, 3.0-5.0 total, legs 1.4-2.2)
-    // Reuse policy for Mid: Limit reuse?
-    // Let's use the remaining pool + maybe 1 reused leg if desperate?
-    // For simplicity, stick to the cumulative exclusion set to maximize diversity
-    const midCandidates = getCandidates(comboPool, baseExclude, CONFIG.combos.mid_combo.max_leg_odds, CONFIG.combos.mid_combo.min_leg_odds);
+    // --- MID COMBO (Max 1 Reuse Logic) ---
+    // Candidate Pool: All valid legs (1.4-2.2) NOT used in other combos
+    const midCandidates = comboPool.filter(b =>
+        !comboUsedMatches.has(b.match_id) &&
+        b.odds >= CONFIG.combos.mid_combo.min_leg_odds &&
+        b.odds <= CONFIG.combos.mid_combo.max_leg_odds
+    );
 
-    // Prefer 3 legs for stability (Low odds legs)
-    combos.mid_combo = generateMidComboRecursive(midCandidates, 3) || generateMidComboRecursive(midCandidates, 2);
+    // We pass sets to recursion to enforce:
+    // 1. Leg allowed? (Is it allowed by policy if it is a single?)
+    // 2. Count limit? (Max 1 from the singles set)
+    combos.mid_combo = generateMidComboRecursive(midCandidates, 3, allSinglesIds, allowedReuseIds)
+                    || generateMidComboRecursive(midCandidates, 2, allSinglesIds, allowedReuseIds);
 
-    if (!combos.mid_combo) combos.debug.push("No valid Mid Combo found");
-
-    // E. Construct Output
     return {
         day_utc: day,
         meta: {
@@ -298,11 +261,12 @@ function checkTier(bet, tierConfig) {
     );
 }
 
-function generateMidComboRecursive(pool, targetLegs) {
+function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuseIds) {
     if (pool.length < targetLegs) return null;
 
-    // Greedy Search
-    const search = (index, currentCombo, currentOdds) => {
+    const maxReuse = CONFIG.combos.mid_combo_max_reuse;
+
+    const search = (index, currentCombo, currentOdds, reuseCount) => {
         if (currentCombo.length === targetLegs) {
             if (currentOdds >= CONFIG.combos.mid_combo.min_total && currentOdds <= CONFIG.combos.mid_combo.max_total) {
                 return {
@@ -316,17 +280,31 @@ function generateMidComboRecursive(pool, targetLegs) {
 
         for (let i = index; i < Math.min(pool.length, 12); i++) {
             const nextLeg = pool[i];
+
+            // --- REUSE & POLICY CHECKS ---
+            const isSingle = allSinglesIds.has(nextLeg.match_id);
+
+            // 1. Policy Check: If it is a single, is it in the allowed set?
+            if (isSingle && !allowedReuseIds.has(nextLeg.match_id)) {
+                continue; // Skip: Single but not allowed by policy
+            }
+
+            // 2. Count Check: Max 1 reused single
+            if (isSingle && reuseCount >= maxReuse) {
+                continue; // Skip: Reuse limit reached
+            }
+
+            // --- ODDS CHECK ---
             const newOdds = currentOdds * nextLeg.odds;
+            if (newOdds > CONFIG.combos.mid_combo.max_total) continue;
 
-            if (newOdds > CONFIG.combos.mid_combo.max_total) continue; // Prune
-
-            const res = search(i + 1, [...currentCombo, nextLeg], newOdds);
+            const res = search(i + 1, [...currentCombo, nextLeg], newOdds, reuseCount + (isSingle ? 1 : 0));
             if (res) return res;
         }
         return null;
     };
 
-    return search(0, [], 1);
+    return search(0, [], 1, 0);
 }
 
 // ============================================================================
@@ -344,8 +322,6 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
         }
 
         const portfolios = selectDailyPortfolio(input);
-
-        // Return multiple items (one per day)
         return portfolios.map(p => ({ json: p }));
     } catch (e) {
         return [{ json: { error: e.message, stack: e.stack } }];
