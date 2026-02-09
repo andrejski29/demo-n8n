@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V10 - Production Audited)
+// n8n Node: Probability Engine & EV Scanner (V11 - Confidence Scoring & Metadata)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -141,7 +141,6 @@ function estimateLambdas(matchRecord) {
   let source = "league_avg_fallback";
   const warnings = [];
 
-  // V9+: Team Mapping Check
   let isContextSwapped = false;
   if (matchRecord.h2h && matchRecord.teams?.home?.id) {
        const teamAId = matchRecord.h2h.team_a_id;
@@ -200,7 +199,7 @@ function estimateLambdas(matchRecord) {
   return { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source, warnings };
 }
 
-// --- 4. EV & Edge ---
+// --- 4. EV, Kelly, Confidence ---
 
 function calculateEV(pModel, odds) {
   if (!odds || odds <= 1.0) return null;
@@ -215,18 +214,47 @@ function calculateKelly(p, odds, fraction = 0.25) {
     return Math.max(0, f * fraction);
 }
 
+function calculateConfidenceScore(pick, meta) {
+    let score = 50; // Base
+
+    // Source Quality
+    if (meta.source === 'xg_signal') score += 20;
+    else if (meta.source === 'context_xg') score += 15;
+    else if (meta.source.includes('ppg')) score += 5;
+    else if (meta.source.includes('fallback')) score -= 15;
+
+    // Devig
+    if (pick.devig_applied) score += 5;
+
+    // Timeframe
+    if (pick.timeframe === 'ft') score += 0;
+    else score -= 5; // HT/2H higher variance
+
+    // Value Strength
+    if (pick.edge > 0.05) score += 5;
+    if (pick.ev > 0.10) score += 5;
+
+    // Risk Penalty
+    if (pick.p_model < 0.35) score -= 10;
+    if (pick.odds > 4.5) score -= 5;
+
+    // Warnings
+    if (meta.warnings && meta.warnings.length > 0) score -= 15;
+
+    return Math.max(0, Math.min(100, score));
+}
+
+function getConfidenceTier(score) {
+    if (score >= 80) return "Elite";
+    if (score >= 65) return "Strong";
+    if (score >= 50) return "Speculative";
+    return "Weak";
+}
+
 function isMarketExclusive(marketName) {
-    // V10: Explicit Whitelist for devigging
     const exclusive = [
-        "1X2",
-        "Over/Under",
-        "BTTS",
-        "Corner 1X2",
-        "Clean Sheet",
-        "Win to Nil",
-        "Corners O/U", // Added V10
-        "HT 1X2", "HT Over/Under", "HT BTTS",
-        "2H 1X2", "2H Over/Under", "2H BTTS"
+        "1X2", "Over/Under", "BTTS", "Corner 1X2", "Clean Sheet", "Win to Nil",
+        "Corners O/U", "HT 1X2", "HT Over/Under", "HT BTTS", "2H 1X2", "2H Over/Under", "2H BTTS"
     ];
     return exclusive.some(ex => marketName.includes(ex));
 }
@@ -244,11 +272,7 @@ function marginAdjustedProb(oddsVector, marketName) {
   }
 
   if (!valid || sum === 0) return null;
-
-  // V9/10: Whitelist check
   if (!isMarketExclusive(marketName)) return null;
-
-  // Fallback for extreme margins (safety)
   if (sum > 1.20) return null;
 
   const fair = {};
@@ -273,8 +297,14 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   const odds = matchRecord.odds?.best || {};
   const minEV = config.min_ev || 0.0;
   const minEdge = config.min_edge || 0.0;
+  const minProb = config.min_p_model || 0.0;
+  const minOdds = config.min_odds || 1.01;
+  const maxOdds = config.max_odds || 100.0;
+  const exclude = config.exclude_markets || [];
 
-  const process = (marketDisplay, modelProbs, mapping, category, confidence) => {
+  const process = (marketDisplay, modelProbs, mapping, meta) => {
+    if (exclude.some(ex => marketDisplay.includes(ex))) return;
+
     const vector = {};
     let missingLegs = 0;
 
@@ -300,34 +330,34 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
 
         if (!offered) continue;
 
-        const pModel = modelProbs[modelSel];
-        const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
+        // Odds Filter
+        if (offered.odds < minOdds || offered.odds > maxOdds) continue;
 
+        const pModel = modelProbs[modelSel];
+        if (pModel < minProb) continue;
+
+        const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
         const ev = calculateEV(pModel, offered.odds);
         const edge = pModel - pMarket;
         const kelly = calculateKelly(pModel, offered.odds, 0.25);
 
-        // Filters (V10)
         if (ev !== null && ev > minEV && edge > minEdge) {
             results.push({
                 market: marketDisplay,
                 selection: modelSel,
-                category: category,
+                category: meta.category,
+                market_family: meta.family, // e.g. goals_ou
+                timeframe: meta.timeframe, // ft, ht, 2h
+                line: meta.line, // 2.5, 9.5
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
                 p_market: Number(pMarket.toFixed(4)),
                 edge: Number(edge.toFixed(4)),
                 ev: Number(ev.toFixed(4)),
                 kelly: Number(kelly.toFixed(4)),
-                confidence: confidence,
                 book: offered.book,
-                // Audit Fields (V10)
                 devig_applied: devigApplied,
-                p_market_source: devigApplied ? "fair_devig" : "implied_raw",
-                why: [
-                    `Model ${Math.round(pModel*100)}% > Market ${Math.round(pMarket*100)}%`,
-                    `EV +${(ev*100).toFixed(1)}%`
-                ]
+                p_market_source: devigApplied ? "fair_devig" : "implied_raw"
             });
         }
     }
@@ -336,119 +366,108 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   // --- GOAL MARKETS ---
   process("1X2", modelMarkets.ft_1x2, {
     "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away"
-  }, "result", "High");
+  }, { category: "result", family: "result_1x2", timeframe: "ft" });
 
   process("Double Chance", modelMarkets.ft_double_chance, {
     "1x": "dc_1x", "12": "dc_12", "x2": "dc_x2"
-  }, "result", "Medium");
+  }, { category: "result", family: "result_dc", timeframe: "ft" });
 
   process("BTTS", modelMarkets.ft_btts, {
     "yes": "btts_yes", "no": "btts_no"
-  }, "goals", "High");
+  }, { category: "goals", family: "goals_btts", timeframe: "ft" });
 
   process("Clean Sheet Home", { "yes": modelMarkets.ft_clean_sheet.home, "no": 1 - modelMarkets.ft_clean_sheet.home }, {
     "yes": "cs_home_yes", "no": "cs_home_no"
-  }, "defense", "High");
+  }, { category: "defense", family: "defense_cs", timeframe: "ft" });
 
   process("Clean Sheet Away", { "yes": modelMarkets.ft_clean_sheet.away, "no": 1 - modelMarkets.ft_clean_sheet.away }, {
     "yes": "cs_away_yes", "no": "cs_away_no"
-  }, "defense", "High");
+  }, { category: "defense", family: "defense_cs", timeframe: "ft" });
 
   process("Win to Nil", { "home": modelMarkets.ft_win_to_nil.home, "away": modelMarkets.ft_win_to_nil.away }, {
     "home": "win_to_nil_home", "away": "win_to_nil_away"
-  }, "combo", "Medium");
+  }, { category: "combo", family: "combo_wtn", timeframe: "ft" });
 
   ["0.5", "1.5", "2.5", "3.5", "4.5"].forEach(L => {
       if (modelMarkets.ft_goals[L]) {
           process(`Over/Under ${L}`, modelMarkets.ft_goals[L], {
               "over": `ft_goals_over_${L}`, "under": `ft_goals_under_${L}`
-          }, "goals", "High");
+          }, { category: "goals", family: "goals_ou", timeframe: "ft", line: Number(L) });
       }
   });
 
   // --- HALF TIME ---
   process("HT 1X2", modelMarkets.ht_1x2, {
     "home": "ht_1x2_home", "draw": "ht_1x2_draw", "away": "ht_1x2_away"
-  }, "half_result", "Medium");
+  }, { category: "half_result", family: "result_1x2", timeframe: "ht" });
 
   process("HT BTTS", modelMarkets.ht_btts, {
     "yes": "ht_btts_yes", "no": "ht_btts_no"
-  }, "half_goals", "Low");
+  }, { category: "half_goals", family: "goals_btts", timeframe: "ht" });
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets.ht_goals[L]) {
           process(`HT Over/Under ${L}`, modelMarkets.ht_goals[L], {
               "over": `ht_goals_over_${L}`, "under": `ht_goals_under_${L}`
-          }, "half_goals", "Medium");
+          }, { category: "half_goals", family: "goals_ou", timeframe: "ht", line: Number(L) });
       }
   });
 
   // --- SECOND HALF ---
   process("2H 1X2", modelMarkets["2h_1x2"], {
     "home": "2h_1x2_home", "draw": "2h_1x2_draw", "away": "2h_1x2_away"
-  }, "half_result", "Medium");
+  }, { category: "half_result", family: "result_1x2", timeframe: "2h" });
 
   process("2H BTTS", modelMarkets["2h_btts"], {
     "yes": "2h_btts_yes", "no": "2h_btts_no"
-  }, "half_goals", "Low");
+  }, { category: "half_goals", family: "goals_btts", timeframe: "2h" });
 
   ["0.5", "1.5", "2.5", "3.5"].forEach(L => {
       if (modelMarkets["2h_goals"][L]) {
           process(`2H Over/Under ${L}`, modelMarkets["2h_goals"][L], {
               "over": `2h_goals_over_${L}`, "under": `2h_goals_under_${L}`
-          }, "half_goals", "Medium");
+          }, { category: "half_goals", family: "goals_ou", timeframe: "2h", line: Number(L) });
       }
   });
 
   // --- CORNERS ---
   process("Corner 1X2", cornerMarkets.corners_1x2, {
       "home": "corners_1x2_home", "draw": "corners_1x2_draw", "away": "corners_1x2_away"
-  }, "corners", "Medium");
+  }, { category: "corners", family: "corners_1x2", timeframe: "ft" });
 
   ["7.5", "8.5", "9.5", "10.5", "11.5"].forEach(L => {
       if (cornerMarkets.corners_ou[L]) {
           process(`Corners O/U ${L}`, cornerMarkets.corners_ou[L], {
               "over": `corners_ou_over_${L}`, "under": `corners_ou_under_${L}`
-          }, "corners", "Medium");
+          }, { category: "corners", family: "corners_ou", timeframe: "ft", line: Number(L) });
       }
   });
 
   return results;
 }
 
-// --- 6. Ranking & Portfolio ---
+// --- 6. Ranking ---
 
-function rankAndFilterPicks(picks, config = {}) {
-  const scored = picks.map(p => {
-    let score = (p.ev * 100) * 0.7 + (p.edge * 100) * 0.3;
-    if (p.confidence === "High") score += 5;
-    if (p.confidence === "Medium") score += 2;
-    if (p.p_model < 0.30) score -= 5;
-    return { ...p, score: Number(score.toFixed(2)) };
-  }).sort((a, b) => b.score - a.score);
+function rankPicks(picks, meta) {
+  return picks.map(p => {
+    const confScore = calculateConfidenceScore(p, meta);
+    const tier = getConfidenceTier(confScore);
 
-  const categorySeen = new Set();
-  const topPicks = [];
-  const others = [];
+    // Sort Score (Rank within list)
+    // Blend of EV and Confidence
+    const sortScore = (p.ev * 100) * 0.6 + (confScore * 0.4);
 
-  for (const p of scored) {
-      if (!categorySeen.has(p.category)) {
-          categorySeen.add(p.category);
-          topPicks.push(p);
-      } else {
-          others.push(p);
-      }
-      if (topPicks.length >= 5) break;
-  }
-
-  if (topPicks.length < 5) {
-      for (const p of others) {
-          if (topPicks.length >= 5) break;
-          topPicks.push(p);
-      }
-  }
-
-  return { all: scored, top: topPicks };
+    return {
+        ...p,
+        confidence_score: confScore,
+        confidence_tier: tier,
+        sort_score: Number(sortScore.toFixed(2)),
+        why: [
+            `EV +${(p.ev*100).toFixed(1)}%`,
+            `Conf: ${confScore}/100 (${tier})`
+        ]
+    };
+  }).sort((a, b) => b.sort_score - a.sort_score);
 }
 
 // --- 7. Main ---
@@ -474,7 +493,7 @@ function runEngine(inputs, config = {}) {
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
-  const ranked = rankAndFilterPicks(rawPicks, config);
+  const ranked = rankPicks(rawPicks, { source, warnings });
 
   return {
     match_id: match.match_id,
@@ -487,16 +506,12 @@ function runEngine(inputs, config = {}) {
       },
       probs: {
         home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),
-        draw: Number(marketsFT.ft_1x2.draw.toFixed(4)),
-        away_win: Number(marketsFT.ft_1x2.away.toFixed(4)),
         btts: Number(marketsFT.ft_btts.yes.toFixed(4)),
-        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4)),
-        corners_over_9_5: Number(marketsCorners.corners_ou["9.5"]?.over.toFixed(4))
+        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4))
       },
-      engine_warnings: warnings // V10
+      engine_warnings: warnings
     },
-    top_picks: ranked.top,
-    all_value_bets: ranked.all
+    all_value_bets: ranked // V11: Full ranked list, Portfolio Manager will slice it
   };
 }
 
