@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V9 - Strict Production Standards)
+// n8n Node: Probability Engine & EV Scanner (V10 - Production Audited)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -20,12 +20,8 @@ function poisson(k, lambda) {
 // --- 2. Modeling Core ---
 
 function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
-  // Independent Dynamic Sizing (V9 Improvement)
-  // Max for each side = ceil(lambda + 5 * sigma)
   const maxH = Math.ceil(lambdaHome + 5 * Math.sqrt(lambdaHome));
   const maxA = Math.ceil(lambdaAway + 5 * Math.sqrt(lambdaAway));
-
-  // Use the larger dimension or hardMax
   const maxGoals = hardMax !== null ? hardMax : Math.max(9, maxH, maxA);
 
   const matrix = [];
@@ -143,31 +139,26 @@ function estimateLambdas(matchRecord) {
   let lambdaHome = 0;
   let lambdaAway = 0;
   let source = "league_avg_fallback";
+  const warnings = [];
 
-  // V9: Team Mapping Check
-  // Check if context.team_a_id matches home.id. If inverted, swap logic.
+  // V9+: Team Mapping Check
   let isContextSwapped = false;
   if (matchRecord.h2h && matchRecord.teams?.home?.id) {
-       // Normalized h2h often contains team_a_id from source
        const teamAId = matchRecord.h2h.team_a_id;
        const homeId = matchRecord.teams.home.id;
        if (teamAId && teamAId !== homeId) {
            isContextSwapped = true;
+           warnings.push("context_team_mapping_swapped");
        }
   }
 
-  // Get raw context values
   let ctxXG_A = matchRecord.context?.team_a_xg_prematch;
   let ctxXG_B = matchRecord.context?.team_b_xg_prematch;
-  let ctxPPG_H = matchRecord.context?.home_ppg; // Usually mapped correctly in normalizer
+  let ctxPPG_H = matchRecord.context?.home_ppg;
   let ctxPPG_A = matchRecord.context?.away_ppg;
 
-  // Swap if needed (Rare, but safety first)
   if (isContextSwapped) {
       [ctxXG_A, ctxXG_B] = [ctxXG_B, ctxXG_A];
-      // Note: home_ppg usually comes from the 'home' column of source, so simpler to trust normalized keys
-      // unless normalizer failed. We assume normalizer mapped home_ppg correctly to the home team.
-      // But team_a_xg is often strictly 'first team listed' which might differ.
   }
 
   const sigXG = matchRecord.signals?.xg;
@@ -206,7 +197,7 @@ function estimateLambdas(matchRecord) {
   cornerLambdaHome = Math.max(1.0, Math.min(12.0, cornerLambdaHome));
   cornerLambdaAway = Math.max(1.0, Math.min(12.0, cornerLambdaAway));
 
-  return { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source };
+  return { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source, warnings };
 }
 
 // --- 4. EV & Edge ---
@@ -225,8 +216,18 @@ function calculateKelly(p, odds, fraction = 0.25) {
 }
 
 function isMarketExclusive(marketName) {
-    // Whitelist for devigging
-    const exclusive = ["1X2", "Over/Under", "BTTS", "Corner 1X2", "Clean Sheet", "Win to Nil"];
+    // V10: Explicit Whitelist for devigging
+    const exclusive = [
+        "1X2",
+        "Over/Under",
+        "BTTS",
+        "Corner 1X2",
+        "Clean Sheet",
+        "Win to Nil",
+        "Corners O/U", // Added V10
+        "HT 1X2", "HT Over/Under", "HT BTTS",
+        "2H 1X2", "2H Over/Under", "2H BTTS"
+    ];
     return exclusive.some(ex => marketName.includes(ex));
 }
 
@@ -244,9 +245,11 @@ function marginAdjustedProb(oddsVector, marketName) {
 
   if (!valid || sum === 0) return null;
 
-  // V9: Explicit Whitelist check instead of heuristic
-  // Double Chance is NOT exclusive.
+  // V9/10: Whitelist check
   if (!isMarketExclusive(marketName)) return null;
+
+  // Fallback for extreme margins (safety)
+  if (sum > 1.20) return null;
 
   const fair = {};
   for (const sel of Object.keys(implied)) {
@@ -265,9 +268,11 @@ function resolveOdds(odds, ...keys) {
     return undefined;
 }
 
-function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
+function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   const results = [];
   const odds = matchRecord.odds?.best || {};
+  const minEV = config.min_ev || 0.0;
+  const minEdge = config.min_edge || 0.0;
 
   const process = (marketDisplay, modelProbs, mapping, category, confidence) => {
     const vector = {};
@@ -282,8 +287,11 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
 
     const hasFullVector = (missingLegs === 0 && Object.keys(mapping).length > 0);
     let marketProbs = null;
+    let devigApplied = false;
+
     if (hasFullVector) {
         marketProbs = marginAdjustedProb(vector, marketDisplay);
+        if (marketProbs) devigApplied = true;
     }
 
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
@@ -297,9 +305,10 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
 
         const ev = calculateEV(pModel, offered.odds);
         const edge = pModel - pMarket;
-        const kelly = calculateKelly(pModel, offered.odds, 0.25); // Standardized 0.25
+        const kelly = calculateKelly(pModel, offered.odds, 0.25);
 
-        if (ev !== null && ev > 0) {
+        // Filters (V10)
+        if (ev !== null && ev > minEV && edge > minEdge) {
             results.push({
                 market: marketDisplay,
                 selection: modelSel,
@@ -312,6 +321,9 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets) {
                 kelly: Number(kelly.toFixed(4)),
                 confidence: confidence,
                 book: offered.book,
+                // Audit Fields (V10)
+                devig_applied: devigApplied,
+                p_market_source: devigApplied ? "fair_devig" : "implied_raw",
                 why: [
                     `Model ${Math.round(pModel*100)}% > Market ${Math.round(pMarket*100)}%`,
                     `EV +${(ev*100).toFixed(1)}%`
@@ -415,7 +427,6 @@ function rankAndFilterPicks(picks, config = {}) {
     return { ...p, score: Number(score.toFixed(2)) };
   }).sort((a, b) => b.score - a.score);
 
-  // V9: Strict Diversity (Max 1 per category in Top Picks)
   const categorySeen = new Set();
   const topPicks = [];
   const others = [];
@@ -427,10 +438,9 @@ function rankAndFilterPicks(picks, config = {}) {
       } else {
           others.push(p);
       }
-      if (topPicks.length >= 5) break; // Hard limit 5 categories
+      if (topPicks.length >= 5) break;
   }
 
-  // If we have fewer than 5, fill from others
   if (topPicks.length < 5) {
       for (const p of others) {
           if (topPicks.length >= 5) break;
@@ -446,9 +456,8 @@ function rankAndFilterPicks(picks, config = {}) {
 function runEngine(inputs, config = {}) {
   const match = inputs.match || inputs;
 
-  const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source } = estimateLambdas(match);
+  const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source, warnings } = estimateLambdas(match);
 
-  // Time splits (Configurable V9)
   const split1H = config.split_1h || 0.45;
   const split2H = config.split_2h || 0.55;
 
@@ -464,7 +473,7 @@ function runEngine(inputs, config = {}) {
 
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
-  const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners);
+  const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
   const ranked = rankAndFilterPicks(rawPicks, config);
 
   return {
@@ -483,7 +492,8 @@ function runEngine(inputs, config = {}) {
         btts: Number(marketsFT.ft_btts.yes.toFixed(4)),
         over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4)),
         corners_over_9_5: Number(marketsCorners.corners_ou["9.5"]?.over.toFixed(4))
-      }
+      },
+      engine_warnings: warnings // V10
     },
     top_picks: ranked.top,
     all_value_bets: ranked.all
