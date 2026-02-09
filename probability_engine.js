@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V11 - Confidence Scoring & Metadata)
+// n8n Node: Probability Engine & EV Scanner (V12 - Prod Safety & Audited)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -27,19 +27,27 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
   const matrix = [];
   let totalProb = 0;
 
+  // Precompute PMFs (V12 Optimization)
+  const distHome = [];
+  const distAway = [];
+  for (let k = 0; k <= maxGoals; k++) {
+      distHome[k] = poisson(k, lambdaHome);
+      distAway[k] = poisson(k, lambdaAway);
+  }
+
   for (let h = 0; h <= maxGoals; h++) {
     const row = [];
-    const pH = poisson(h, lambdaHome);
+    const pH = distHome[h];
     for (let a = 0; a <= maxGoals; a++) {
-      const pA = poisson(a, lambdaAway);
-      const pScore = pH * pA;
+      const pScore = pH * distAway[a];
       row.push(pScore);
       totalProb += pScore;
     }
     matrix.push(row);
   }
 
-  if (totalProb > 0 && totalProb < 1) {
+  // Renormalize (V12 Safety: Check epsilon drift)
+  if (Math.abs(totalProb - 1.0) > 1e-9) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
         matrix[h][a] /= totalProb;
@@ -215,30 +223,24 @@ function calculateKelly(p, odds, fraction = 0.25) {
 }
 
 function calculateConfidenceScore(pick, meta) {
-    let score = 50; // Base
+    let score = 50;
 
-    // Source Quality
     if (meta.source === 'xg_signal') score += 20;
     else if (meta.source === 'context_xg') score += 15;
     else if (meta.source.includes('ppg')) score += 5;
     else if (meta.source.includes('fallback')) score -= 15;
 
-    // Devig
     if (pick.devig_applied) score += 5;
 
-    // Timeframe
     if (pick.timeframe === 'ft') score += 0;
-    else score -= 5; // HT/2H higher variance
+    else score -= 5;
 
-    // Value Strength
     if (pick.edge > 0.05) score += 5;
     if (pick.ev > 0.10) score += 5;
 
-    // Risk Penalty
     if (pick.p_model < 0.35) score -= 10;
     if (pick.odds > 4.5) score -= 5;
 
-    // Warnings
     if (meta.warnings && meta.warnings.length > 0) score -= 15;
 
     return Math.max(0, Math.min(100, score));
@@ -271,15 +273,17 @@ function marginAdjustedProb(oddsVector, marketName) {
     sum += p;
   }
 
-  if (!valid || sum === 0) return null;
-  if (!isMarketExclusive(marketName)) return null;
-  if (sum > 1.20) return null;
+  if (!valid || sum === 0) return { prob: null, margin: 0, reason: "invalid_odds" };
+
+  // V12: Reason tracking
+  if (!isMarketExclusive(marketName)) return { prob: null, margin: sum, reason: "not_exclusive" };
+  if (sum > 1.20) return { prob: null, margin: sum, reason: "margin_too_high" };
 
   const fair = {};
   for (const sel of Object.keys(implied)) {
     fair[sel] = implied[sel] / sum;
   }
-  return fair;
+  return { prob: fair, margin: sum, reason: null };
 }
 
 // --- 5. Market Scanner ---
@@ -318,10 +322,19 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
     const hasFullVector = (missingLegs === 0 && Object.keys(mapping).length > 0);
     let marketProbs = null;
     let devigApplied = false;
+    let devigSkipReason = hasFullVector ? null : "incomplete_vector";
+    let marginSum = null;
 
     if (hasFullVector) {
-        marketProbs = marginAdjustedProb(vector, marketDisplay);
-        if (marketProbs) devigApplied = true;
+        const devigResult = marginAdjustedProb(vector, marketDisplay);
+        if (devigResult.prob) {
+            marketProbs = devigResult.prob;
+            devigApplied = true;
+            marginSum = devigResult.margin;
+        } else {
+            devigSkipReason = devigResult.reason;
+            marginSum = devigResult.margin;
+        }
     }
 
     for (const [modelSel, oddKey] of Object.entries(mapping)) {
@@ -330,7 +343,6 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
 
         if (!offered) continue;
 
-        // Odds Filter
         if (offered.odds < minOdds || offered.odds > maxOdds) continue;
 
         const pModel = modelProbs[modelSel];
@@ -346,9 +358,9 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 market: marketDisplay,
                 selection: modelSel,
                 category: meta.category,
-                market_family: meta.family, // e.g. goals_ou
-                timeframe: meta.timeframe, // ft, ht, 2h
-                line: meta.line, // 2.5, 9.5
+                market_family: meta.family,
+                timeframe: meta.timeframe,
+                line: meta.line,
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
                 p_market: Number(pMarket.toFixed(4)),
@@ -356,8 +368,13 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 ev: Number(ev.toFixed(4)),
                 kelly: Number(kelly.toFixed(4)),
                 book: offered.book,
+                // V12 Audit
                 devig_applied: devigApplied,
-                p_market_source: devigApplied ? "fair_devig" : "implied_raw"
+                p_market_source: devigApplied ? "fair_devig" : "implied_raw",
+                devig_skip_reason: devigSkipReason,
+                vector_complete: hasFullVector,
+                missing_legs: missingLegs,
+                margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
             });
         }
     }
@@ -446,31 +463,64 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking ---
+// --- 6. Ranking & Portfolio ---
 
-function rankPicks(picks, meta) {
-  return picks.map(p => {
+function rankAndFilterPicks(picks, meta, config) {
+  const wEV = config.rank_w_ev !== undefined ? config.rank_w_ev : 0.6;
+  const wConf = config.rank_w_conf !== undefined ? config.rank_w_conf : 0.4;
+
+  const scored = picks.map(p => {
     const confScore = calculateConfidenceScore(p, meta);
     const tier = getConfidenceTier(confScore);
 
-    // Sort Score (Rank within list)
-    // Blend of EV and Confidence
-    const sortScore = (p.ev * 100) * 0.6 + (confScore * 0.4);
+    // Sort Score (V12 Configurable)
+    const sortScore = (p.ev * 100) * wEV + (confScore * wConf);
 
     return {
         ...p,
         confidence_score: confScore,
         confidence_tier: tier,
-        sort_score: Number(sortScore.toFixed(2)),
-        why: [
-            `EV +${(p.ev*100).toFixed(1)}%`,
-            `Conf: ${confScore}/100 (${tier})`
-        ]
+        sort_score: Number(sortScore.toFixed(2))
     };
   }).sort((a, b) => b.sort_score - a.sort_score);
+
+  const categorySeen = new Set();
+  const topPicks = [];
+  const others = [];
+
+  for (const p of scored) {
+      if (!categorySeen.has(p.category)) {
+          categorySeen.add(p.category);
+          topPicks.push(p);
+      } else {
+          others.push(p);
+      }
+      if (topPicks.length >= 5) break;
+  }
+
+  if (topPicks.length < 5) {
+      for (const p of others) {
+          if (topPicks.length >= 5) break;
+          topPicks.push(p);
+      }
+  }
+
+  return { all: scored, top: topPicks };
 }
 
-// --- 7. Main ---
+// --- 7. Sanity Check (V12) ---
+function runSanityChecks(markets, probs, warnings) {
+    // 1X2 Sum
+    const sum1X2 = markets.ft_1x2.home + markets.ft_1x2.draw + markets.ft_1x2.away;
+    if (Math.abs(sum1X2 - 1) > 0.001) warnings.push(`sanity_1x2_sum_drift_${sum1X2.toFixed(4)}`);
+
+    // BTTS Sum
+    const sumBTTS = markets.ft_btts.yes + markets.ft_btts.no;
+    if (Math.abs(sumBTTS - 1) > 0.001) warnings.push(`sanity_btts_sum_drift_${sumBTTS.toFixed(4)}`);
+}
+
+
+// --- 8. Main ---
 
 function runEngine(inputs, config = {}) {
   const match = inputs.match || inputs;
@@ -490,10 +540,13 @@ function runEngine(inputs, config = {}) {
   const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
   const marketsCorners = deriveCornerMarkets(matrixCorners);
 
+  // V12: Sanity Check
+  runSanityChecks(marketsFT, null, warnings);
+
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
-  const ranked = rankPicks(rawPicks, { source, warnings });
+  const ranked = rankAndFilterPicks(rawPicks, { source, warnings }, config);
 
   return {
     match_id: match.match_id,
@@ -507,11 +560,13 @@ function runEngine(inputs, config = {}) {
       probs: {
         home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),
         btts: Number(marketsFT.ft_btts.yes.toFixed(4)),
-        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4))
+        over_2_5: Number(marketsFT.ft_goals["2.5"]?.over.toFixed(4)),
+        corners_over_9_5: Number(marketsCorners.corners_ou["9.5"]?.over.toFixed(4))
       },
       engine_warnings: warnings
     },
-    all_value_bets: ranked // V11: Full ranked list, Portfolio Manager will slice it
+    top_picks: ranked.top,
+    all_value_bets: ranked.all
   };
 }
 
