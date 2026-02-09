@@ -1,0 +1,171 @@
+[
+  {
+    "match_id": 8223604,
+    "meta": {
+      "season": "2025/2026",
+      "status": "incomplete",
+      "game_week": 25,
+      "date_unix": 1770408000,
+      "competition_id": 15050,
+      "stadium_name": "Elland Road",
+      "stadium_location": "Elland Road, Leeds, West Yorkshire",
+      "round_id": 120208
+    },
+    "teams": {
+      "home": {
+        "id": 222,
+        "name": "Leeds United"
+      },
+      "away": {
+        "id": 211,
+        "name": "Nottingham Forest"
+      }
+    },
+    "context": {
+      "home_ppg": 1.58,
+      "away_ppg": 1.17,
+      "team_a_xg_prematch": 1.51,
+      "team_b_xg_prematch": 1.21,
+      "total_xg_prematch": 2.72,
+      "btts_potential": 50,
+      "o25_potential": 55,
+      "corners_potential": 9.75,
+      "cards_potential": 3.42,
+      "offsides_potential": 3.42
+    },
+    "odds": {
+      "best": {
+        "ft_1x2_home": { "odds": 2.28, "book": "Dafabet" },
+        "ft_1x2_draw": { "odds": 3.44, "book": "1xbet" },
+        "ft_1x2_away": { "odds": 3.61, "book": "Cashpoint" },
+        "ft_goals_over_0.5": { "odds": 1.07, "book": "10Bet" },
+        "ft_goals_over_1.5": { "odds": 1.38, "book": "10Bet" },
+        "ft_goals_over_2.5": { "odds": 2.14, "book": "1xbet" },
+        "ft_goals_over_3.5": { "odds": 3.8, "book": "10Bet" },
+        "ft_goals_over_4.5": { "odds": 8, "book": "Unibet" },
+        "ft_goals_under_0.5": { "odds": 9.5, "book": "Unibet" },
+        "ft_goals_under_1.5": { "odds": 3.3, "book": "Unibet" },
+        "ft_goals_under_2.5": { "odds": 1.88, "book": "188Bet" },
+        "ft_goals_under_3.5": { "odds": 1.3, "book": "Pinnacle" },
+        "ft_goals_under_4.5": { "odds": 1.08, "book": "888Sport" },
+        "btts_yes": { "odds": 1.92, "book": "Pinnacle" },
+        "btts_no": { "odds": 1.98, "book": "Unibet" },
+        "cs_home_yes": { "odds": 2.65, "book": "internal" },
+        "cs_home_no": { "odds": 1.42, "book": "10Bet" },
+        "cs_away_yes": { "odds": 3.55, "book": "10Bet" },
+        "cs_away_no": { "odds": 1.25, "book": "10Bet" },
+        "dc_1x": { "odds": 1.34, "book": "1xbet" },
+        "dc_x2": { "odds": 1.72, "book": "1xbet" },
+        "ht_1x2_home": { "odds": 2.92, "book": "Pinnacle" },
+        "ht_1x2_draw": { "odds": 2.21, "book": "Pinnacle" },
+        "ht_1x2_away": { "odds": 4.15, "book": "1xbet" },
+        "2h_1x2_home": { "odds": 2.7, "book": "WilliamHill" },
+        "2h_1x2_draw": { "odds": 2.43, "book": "Unibet" },
+        "2h_1x2_away": { "odds": 3.7, "book": "1xbet" },
+        "corners_ou_over_7.5": { "odds": 1.24, "book": "1xbet" },
+        "corners_ou_over_8.5": { "odds": 1.48, "book": "Pinnacle" },
+        "corners_ou_over_9.5": { "odds": 2.05, "book": "internal" },
+        "corners_ou_over_10.5": { "odds": 2.29, "book": "Pinnacle" },
+        "corners_ou_over_11.5": { "odds": 2.78, "book": "1xbet" },
+        "corners_ou_under_7.5": { "odds": 3.6, "book": "internal" },
+        "corners_ou_under_8.5": { "odds": 2.6, "book": "1xbet" },
+        "corners_ou_under_9.5": { "odds": 2, "book": "internal" },
+        "corners_ou_under_10.5": { "odds": 1.7, "book": "10Bet" },
+        "corners_ou_under_11.5": { "odds": 1.4, "book": "internal" },
+        "corners_1x2_home": { "odds": 1.76, "book": "Unibet" },
+        "corners_1x2_draw": { "odds": 8.5, "book": "WilliamHill" },
+        "corners_1x2_away": { "odds": 2.55, "book": "1xbet" },
+        "win_to_nil_home": { "odds": 3.65, "book": "internal" },
+        "win_to_nil_away": { "odds": 6, "book": "bet365" },
+        "ht_goals_over_0.5": { "odds": 1.45, "book": "1xbet" },
+        "ht_goals_over_1.5": { "odds": 2.97, "book": "1xbet" },
+        "ht_goals_over_2.5": { "odds": 8, "book": "WilliamHill" },
+        "ht_goals_over_3.5": { "odds": 26, "book": "internal" },
+        "ht_goals_under_0.5": { "odds": 2.8, "book": "WilliamHill" },
+        "ht_goals_under_1.5": { "odds": 1.36, "book": "WilliamHill" },
+        "ht_goals_under_2.5": { "odds": 1.07, "book": "WilliamHill" },
+        "ht_goals_under_3.5": { "odds": 1.01, "book": "internal" },
+        "2h_goals_over_0.5": { "odds": 1.29, "book": "WilliamHill" },
+        "2h_goals_over_1.5": { "odds": 2.25, "book": "Unibet" },
+        "2h_goals_over_2.5": { "odds": 5, "book": "Unibet" },
+        "2h_goals_over_3.5": { "odds": 13, "book": "internal" },
+        "2h_goals_under_0.5": { "odds": 3.55, "book": "Unibet" },
+        "2h_goals_under_1.5": { "odds": 1.63, "book": "1xbet" },
+        "2h_goals_under_2.5": { "odds": 1.15, "book": "WilliamHill" },
+        "2h_goals_under_3.5": { "odds": 1.03, "book": "internal" },
+        "2h_btts_no": { "odds": 1.29, "book": "WilliamHill" },
+        "2h_btts_yes": { "odds": 3.5, "book": "bet365" },
+        "dc_12": { "odds": 1.36, "book": "1xbet" },
+        "ht_btts_yes": { "odds": 5.21, "book": "Pinnacle" },
+        "ht_btts_no": { "odds": 1.18, "book": "WilliamHill" }
+      },
+      "groups": {
+        "ft_1x2": [ "ft_1x2_home", "ft_1x2_draw", "ft_1x2_away" ],
+        "ht_1x2": [ "ht_1x2_home", "ht_1x2_draw", "ht_1x2_away" ],
+        "2h_1x2": [ "2h_1x2_home", "2h_1x2_draw", "2h_1x2_away" ],
+        "dc": [ "dc_1x", "dc_12", "dc_x2" ],
+        "btts": [ "btts_yes", "btts_no" ],
+        "ht_btts": [ "ht_btts_yes", "ht_btts_no" ],
+        "2h_btts": [ "2h_btts_yes", "2h_btts_no" ],
+        "dnb": [ "dnb_home", "dnb_away" ],
+        "cs_home": [ "cs_home_yes", "cs_home_no" ],
+        "cs_away": [ "cs_away_yes", "cs_away_no" ],
+        "corners_1x2": [ "corners_1x2_home", "corners_1x2_draw", "corners_1x2_away" ],
+        "ft_goals_0.5": [ "ft_goals_over_0.5", "ft_goals_under_0.5" ],
+        "ft_goals_1.5": [ "ft_goals_over_1.5", "ft_goals_under_1.5" ],
+        "ft_goals_2.5": [ "ft_goals_over_2.5", "ft_goals_under_2.5" ],
+        "ft_goals_3.5": [ "ft_goals_over_3.5", "ft_goals_under_3.5" ],
+        "ft_goals_4.5": [ "ft_goals_over_4.5", "ft_goals_under_4.5" ],
+        "corners_ou_7.5": [ "corners_ou_over_7.5", "corners_ou_under_7.5" ],
+        "corners_ou_8.5": [ "corners_ou_over_8.5", "corners_ou_under_8.5" ],
+        "corners_ou_9.5": [ "corners_ou_over_9.5", "corners_ou_under_9.5" ],
+        "corners_ou_10.5": [ "corners_ou_over_10.5", "corners_ou_under_10.5" ],
+        "corners_ou_11.5": [ "corners_ou_over_11.5", "corners_ou_under_11.5" ],
+        "ht_goals_0.5": [ "ht_goals_over_0.5", "ht_goals_under_0.5" ],
+        "ht_goals_1.5": [ "ht_goals_over_1.5", "ht_goals_under_1.5" ],
+        "ht_goals_2.5": [ "ht_goals_over_2.5", "ht_goals_under_2.5" ],
+        "ht_goals_3.5": [ "ht_goals_over_3.5", "ht_goals_under_3.5" ],
+        "2h_goals_0.5": [ "2h_goals_over_0.5", "2h_goals_under_0.5" ],
+        "2h_goals_1.5": [ "2h_goals_over_1.5", "2h_goals_under_1.5" ],
+        "2h_goals_2.5": [ "2h_goals_over_2.5", "2h_goals_under_2.5" ],
+        "2h_goals_3.5": [ "2h_goals_over_3.5", "2h_goals_under_3.5" ]
+      }
+    },
+    "team_stats": {
+      "home": {
+        "team_meta": { "id": 222 },
+        "season_stats": {
+          "features": {
+            "corners_for_pm_overall": 4.54,
+            "corners_against_pm_overall": 4.16,
+            "corners_total_pm_overall": 8.71
+          }
+        },
+        "form_stats": {
+          "last_5": {
+            "features": {
+              "corners_for_pm_overall": 4.8
+            }
+          }
+        }
+      },
+      "away": {
+        "team_meta": { "id": 211 },
+        "season_stats": {
+          "features": {
+            "corners_for_pm_overall": 5.33,
+            "corners_against_pm_overall": 4.83,
+            "corners_total_pm_overall": 10.16
+          }
+        },
+        "form_stats": {
+          "last_5": {
+            "features": {
+              "corners_for_pm_overall": 4.2
+            }
+          }
+        }
+      }
+    }
+  }
+]
