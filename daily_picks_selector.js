@@ -1,9 +1,10 @@
 /**
- * Daily Picks Selector Node (v2.5.1 - Final Polish)
+ * Daily Picks Selector Node (v2.5.2 - Diversity & Stability)
  *
- * Changelog v2.5.1:
- * - Optimization: Switched diversity penalty to a multiplicative factor (0.97) for stability.
- * - Output: Removed internal `score` property from final combo objects.
+ * Changelog v2.5.2:
+ * - Mid Combo: Enforced diversity with `max_same_family: 2` constraint.
+ * - Stability: Added deterministic `match_id` tie-breaker to sorting.
+ * - Logic: Updated `generateMidComboRecursive` to track market families.
  */
 
 // ============================================================================
@@ -59,7 +60,8 @@ const CONFIG = {
             max_leg_odds: 2.20,
             min_total: 3.0,
             max_total: 5.0,
-            max_legs: 3
+            max_legs: 3,
+            max_same_family: 2 // Hard constraint for diversity
         }
     }
 };
@@ -159,14 +161,16 @@ function processDay(day, bets) {
         }
     });
 
-    // Select Singles
+    // C. Select Singles
     const selectedTiers = { core: [], value: [], high_pot: [] };
 
+    // Sorter: Prob Desc > Conf Desc > SortScore Desc > EV Desc > MatchID (Deterministic)
     const sorter = (a, b) => {
         if (b.p_model !== a.p_model) return b.p_model - a.p_model;
         if (b.confidence_score !== a.confidence_score) return b.confidence_score - a.confidence_score;
         if (b.sort_score !== a.sort_score) return b.sort_score - a.sort_score;
-        return b.ev - a.ev;
+        if (b.ev !== a.ev) return b.ev - a.ev;
+        return (a.match_id || 0) - (b.match_id || 0);
     };
 
     Object.values(bestPerMatch).forEach(bet => selectedTiers[bet._tier].push(bet));
@@ -350,8 +354,7 @@ function pickBestDouble(pool, minTotal, maxCheck = 25) {
 
                 const candidate = {
                     legs: [a, b],
-                    total_odds: total,
-                    score: score
+                    total_odds: total
                 };
 
                 if (!best || score > bestScore) {
@@ -361,15 +364,16 @@ function pickBestDouble(pool, minTotal, maxCheck = 25) {
             }
         }
     }
-    return best; // Returns { legs, total_odds, score }
+    return best; // Returns { legs, total_odds }
 }
 
 function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuseIds) {
     if (pool.length < targetLegs) return null;
 
     const maxReuse = CONFIG.combos.mid_combo_max_reuse;
+    const maxSameFamily = CONFIG.combos.mid_combo.max_same_family ?? 99;
 
-    const search = (index, currentCombo, currentOdds, reuseCount) => {
+    const search = (index, currentCombo, currentOdds, reuseCount, familyCounts) => {
         if (currentCombo.length === targetLegs) {
             if (currentOdds >= CONFIG.combos.mid_combo.min_total && currentOdds <= CONFIG.combos.mid_combo.max_total) {
                 return {
@@ -384,20 +388,33 @@ function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuse
         for (let i = index; i < Math.min(pool.length, 15); i++) { // Deepened search slightly
             const nextLeg = pool[i];
 
+            // --- REUSE & POLICY CHECKS ---
             const isSingle = allSinglesIds.has(nextLeg.match_id);
             if (isSingle && !allowedReuseIds.has(nextLeg.match_id)) continue;
             if (isSingle && reuseCount >= maxReuse) continue;
 
+            // --- ODDS CHECK ---
             const newOdds = currentOdds * nextLeg.odds;
             if (newOdds > CONFIG.combos.mid_combo.max_total) continue;
 
-            const res = search(i + 1, [...currentCombo, nextLeg], newOdds, reuseCount + (isSingle ? 1 : 0));
+            // --- DIVERSITY CHECK ---
+            const fam = nextLeg.market_family || "unknown";
+            const nextFamilyCounts = { ...familyCounts, [fam]: (familyCounts[fam] || 0) + 1 };
+            if (nextFamilyCounts[fam] > maxSameFamily) continue;
+
+            const res = search(
+                i + 1,
+                [...currentCombo, nextLeg],
+                newOdds,
+                reuseCount + (isSingle ? 1 : 0),
+                nextFamilyCounts
+            );
             if (res) return res;
         }
         return null;
     };
 
-    return search(0, [], 1, 0);
+    return search(0, [], 1, 0, {});
 }
 
 // ============================================================================
