@@ -1,10 +1,9 @@
 /**
- * Daily Picks Selector Node (v2.5 - Probability-First Optimization)
+ * Daily Picks Selector Node (v2.5.1 - Final Polish)
  *
- * Changelog v2.5:
- * - EV Logic: Removed global EV filter; strictly config-driven per tier.
- * - Doubles Logic: `pickBestDouble` now prioritizes Probability > Confidence > EV > Lowest Odds.
- * - Diversity: Added preference for different market families in doubles.
+ * Changelog v2.5.1:
+ * - Optimization: Switched diversity penalty to a multiplicative factor (0.97) for stability.
+ * - Output: Removed internal `score` property from final combo objects.
  */
 
 // ============================================================================
@@ -45,6 +44,7 @@ const CONFIG = {
     combos: {
         reuse_policy: "core_only", // "none" | "core_only" | "full"
         mid_combo_max_reuse: 1,    // Max 1 reused single allowed in Mid Combo
+        diversity_factor: 0.97,    // Multiplier applied to probability score if market families match
 
         core_double: {
             max_leg_odds: 2.20,
@@ -210,7 +210,8 @@ function processDay(day, bets) {
     if (coreDouble) {
         combos.core_double = {
             type: "CORE DOUBLE",
-            ...coreDouble
+            legs: coreDouble.legs,
+            total_odds: coreDouble.total_odds
         };
         comboUsedMatches.add(coreDouble.legs[0].match_id);
         comboUsedMatches.add(coreDouble.legs[1].match_id);
@@ -225,7 +226,8 @@ function processDay(day, bets) {
     if (smartDouble) {
         combos.smart_double = {
             type: "SMART DOUBLE",
-            ...smartDouble
+            legs: smartDouble.legs,
+            total_odds: smartDouble.total_odds
         };
         comboUsedMatches.add(smartDouble.legs[0].match_id);
         comboUsedMatches.add(smartDouble.legs[1].match_id);
@@ -334,16 +336,16 @@ function pickBestDouble(pool, minTotal, maxCheck = 25) {
                 const sumEV = a.ev + b.ev;
 
                 // Diversity Bonus (Soft constraint: different families preferred)
-                // If market_family matches, apply slight penalty to probability score?
-                // Just keep it simple: Primary driver is Probability.
-                const diversityPenalty = (a.market_family && b.market_family && a.market_family === b.market_family) ? 0.05 : 0;
+                // Use multiplicative factor for stability
+                const diversityFactor = (a.market_family && b.market_family && a.market_family === b.market_family)
+                    ? CONFIG.combos.diversity_factor
+                    : 1.0;
 
                 // Composite Score (Weighted)
                 // Prob is dominant (0-1).
-                // We want P=0.64 (0.8*0.8) to beat P=0.49 (0.7*0.7) regardless of odds.
-                const score = (pairProb - diversityPenalty) * 10000
-                            + minConf * 100
-                            + sumEV * 10
+                const score = (pairProb * diversityFactor * 10000)
+                            + (minConf * 100)
+                            + (sumEV * 10)
                             - total; // Subtract odds to prefer lower variance if all else equal
 
                 const candidate = {
