@@ -1,10 +1,10 @@
 /**
- * Daily Picks Selector Node (v2.4 - Odds Refinement)
+ * Daily Picks Selector Node (v2.5 - Probability-First Optimization)
  *
- * Changelog v2.4:
- * - Config: Core Odds Floor raised to 1.30.
- * - Config: Added min_total for Core Double (1.80) and Smart Double (2.00).
- * - Logic: Implemented `pickBestDouble` to search for safest pairs meeting min_total.
+ * Changelog v2.5:
+ * - EV Logic: Removed global EV filter; strictly config-driven per tier.
+ * - Doubles Logic: `pickBestDouble` now prioritizes Probability > Confidence > EV > Lowest Odds.
+ * - Diversity: Added preference for different market families in doubles.
  */
 
 // ============================================================================
@@ -15,10 +15,10 @@ const CONFIG = {
     core: {
         prob_min: 0.62,
         conf_min: 70,
-        odds_min: 1.30, // Raised from 1.25
+        odds_min: 1.30,
         odds_max: 2.00,
         limit_count: 6,
-        ev_min: 0
+        ev_min: 0.01 // Tuned for robustness
     },
 
     // 2. VALUE SINGLES (Winnable Edge)
@@ -28,7 +28,7 @@ const CONFIG = {
         odds_min: 1.60,
         odds_max: 2.60,
         limit_count: 5,
-        ev_min: 0
+        ev_min: 0.02
     },
 
     // 3. HIGH POTENTIAL (Controlled Upside, No Longshots)
@@ -38,7 +38,7 @@ const CONFIG = {
         odds_min: 2.20,
         odds_max: 3.20,
         limit_count: 3,
-        ev_min: 0
+        ev_min: 0.04
     },
 
     // 4. COMBOS
@@ -76,11 +76,9 @@ function selectDailyPortfolio(allBets) {
 
         let dayKey = "UNKNOWN";
         try {
-            // Safer Parsing: Check for YYYY-MM-DD at start
             if (/^\d{4}-\d{2}-\d{2}/.test(bet.date_iso)) {
                 dayKey = bet.date_iso.substring(0, 10);
             } else {
-                // Fallback to Date object parsing
                 const d = new Date(bet.date_iso);
                 if (!isNaN(d.getTime())) {
                     dayKey = d.toISOString().split('T')[0];
@@ -98,7 +96,6 @@ function selectDailyPortfolio(allBets) {
 
     const dailyPortfolios = [];
 
-    // 2. Process Each Day Independently
     Object.keys(betsByDay).sort().forEach(day => {
         const portfolio = processDay(day, betsByDay[day]);
         if (portfolio) {
@@ -113,12 +110,10 @@ function selectDailyPortfolio(allBets) {
  * Process a single day's bets into a portfolio
  */
 function processDay(day, bets) {
-    // A. Filter & Classify
     const candidates = { core: [], value: [], high_pot: [] };
     const skipped = [];
 
     bets.forEach(rawBet => {
-        // SANITATION & VALIDATION
         const bet = sanitizeBet(rawBet);
 
         if (!bet) {
@@ -126,12 +121,13 @@ function processDay(day, bets) {
             return;
         }
 
+        // Tier Checks (EV is checked internally via CONFIG)
         if (checkTier(bet, CONFIG.core)) candidates.core.push(bet);
         else if (checkTier(bet, CONFIG.value)) candidates.value.push(bet);
         else if (checkTier(bet, CONFIG.high_pot)) candidates.high_pot.push(bet);
     });
 
-    // B. Deduplicate (Best per Match)
+    // Deduplicate (Best per Match)
     const allCandidates = [
         ...candidates.core.map(b => ({ ...b, _tier: 'core' })),
         ...candidates.value.map(b => ({ ...b, _tier: 'value' })),
@@ -163,10 +159,9 @@ function processDay(day, bets) {
         }
     });
 
-    // C. Select Singles
+    // Select Singles
     const selectedTiers = { core: [], value: [], high_pot: [] };
 
-    // Sorter: Prob Desc > Conf Desc > SortScore Desc > EV Desc
     const sorter = (a, b) => {
         if (b.p_model !== a.p_model) return b.p_model - a.p_model;
         if (b.confidence_score !== a.confidence_score) return b.confidence_score - a.confidence_score;
@@ -180,16 +175,12 @@ function processDay(day, bets) {
     const finalValue = selectedTiers.value.sort(sorter).slice(0, CONFIG.value.limit_count);
     const finalHighPot = selectedTiers.high_pot.sort(sorter).slice(0, CONFIG.high_pot.limit_count);
 
-    // D. Generate Combos
-
-    // 1. Identify Match IDs for Reuse Policy
+    // Generate Combos
     const coreIds = new Set(finalCore.map(b => b.match_id));
     const valueIds = new Set(finalValue.map(b => b.match_id));
     const highPotIds = new Set(finalHighPot.map(b => b.match_id));
-
     const allSinglesIds = new Set([...coreIds, ...valueIds, ...highPotIds]);
 
-    // Determine Allowed Reuse based on Policy
     let allowedReuseIds = new Set();
     const policy = CONFIG.combos.reuse_policy;
 
@@ -199,6 +190,7 @@ function processDay(day, bets) {
         allowedReuseIds = coreIds;
     }
 
+    // We use the full sorted pool for combos
     const comboPool = Object.values(bestPerMatch).sort(sorter);
     const combos = { core_double: null, smart_double: null, mid_combo: null, debug: [] };
     const comboUsedMatches = new Set();
@@ -321,32 +313,53 @@ function checkTier(bet, tierConfig) {
 }
 
 /**
- * Searches for the "safest" pair that meets the minimum total odds requirement.
- * Safest = lowest total odds that is >= minTotal.
+ * Searches for the optimal pair using a PROBABILITY-FIRST scoring system.
+ * Constraint: Total Odds >= minTotal
+ * Optimization: Max(ProbA * ProbB) > Max(MinConf) > Max(SumEV) > Min(TotalOdds)
  */
 function pickBestDouble(pool, minTotal, maxCheck = 25) {
     const n = Math.min(pool.length, maxCheck);
     let best = null;
+    let bestScore = -1;
 
     for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
             const a = pool[i], b = pool[j];
-            const total = a.odds * b.odds;
+            const total = parseFloat((a.odds * b.odds).toFixed(2));
 
             if (total >= minTotal) {
+                // Scoring Components
+                const pairProb = a.p_model * b.p_model;
+                const minConf = Math.min(a.confidence_score, b.confidence_score);
+                const sumEV = a.ev + b.ev;
+
+                // Diversity Bonus (Soft constraint: different families preferred)
+                // If market_family matches, apply slight penalty to probability score?
+                // Just keep it simple: Primary driver is Probability.
+                const diversityPenalty = (a.market_family && b.market_family && a.market_family === b.market_family) ? 0.05 : 0;
+
+                // Composite Score (Weighted)
+                // Prob is dominant (0-1).
+                // We want P=0.64 (0.8*0.8) to beat P=0.49 (0.7*0.7) regardless of odds.
+                const score = (pairProb - diversityPenalty) * 10000
+                            + minConf * 100
+                            + sumEV * 10
+                            - total; // Subtract odds to prefer lower variance if all else equal
+
                 const candidate = {
                     legs: [a, b],
-                    total_odds: parseFloat(total.toFixed(2))
+                    total_odds: total,
+                    score: score
                 };
 
-                // Safest approach: choose smallest total that passes minTotal
-                if (!best || candidate.total_odds < best.total_odds) {
+                if (!best || score > bestScore) {
                     best = candidate;
+                    bestScore = score;
                 }
             }
         }
     }
-    return best;
+    return best; // Returns { legs, total_odds, score }
 }
 
 function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuseIds) {
@@ -366,7 +379,7 @@ function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuse
             return null;
         }
 
-        for (let i = index; i < Math.min(pool.length, 12); i++) {
+        for (let i = index; i < Math.min(pool.length, 15); i++) { // Deepened search slightly
             const nextLeg = pool[i];
 
             const isSingle = allSinglesIds.has(nextLeg.match_id);
