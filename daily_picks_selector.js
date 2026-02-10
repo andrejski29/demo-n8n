@@ -1,10 +1,10 @@
 /**
- * Daily Picks Selector Node (v2.3.2 - Final Production Hardening)
+ * Daily Picks Selector Node (v2.4 - Odds Refinement)
  *
- * Changelog v2.3.2:
- * - Data Hygiene: Added `sanitizeBet` to normalize numeric fields and validate match_id.
- * - Validation: Bets with missing match_id or invalid critical metrics are skipped.
- * - Logging: Added `skipped_bets` count to meta for observability.
+ * Changelog v2.4:
+ * - Config: Core Odds Floor raised to 1.30.
+ * - Config: Added min_total for Core Double (1.80) and Smart Double (2.00).
+ * - Logic: Implemented `pickBestDouble` to search for safest pairs meeting min_total.
  */
 
 // ============================================================================
@@ -15,7 +15,7 @@ const CONFIG = {
     core: {
         prob_min: 0.62,
         conf_min: 70,
-        odds_min: 1.25,
+        odds_min: 1.30, // Raised from 1.25
         odds_max: 2.00,
         limit_count: 6,
         ev_min: 0
@@ -47,10 +47,12 @@ const CONFIG = {
         mid_combo_max_reuse: 1,    // Max 1 reused single allowed in Mid Combo
 
         core_double: {
-            max_leg_odds: 2.20
+            max_leg_odds: 2.20,
+            min_total: 1.80
         },
         smart_double: {
-            max_leg_odds: 2.60
+            max_leg_odds: 2.60,
+            min_total: 2.00
         },
         mid_combo: {
             min_leg_odds: 1.40,
@@ -124,8 +126,6 @@ function processDay(day, bets) {
             return;
         }
 
-        // EV filtering is now fully delegated to checkTier via CONFIG.ev_min
-
         if (checkTier(bet, CONFIG.core)) candidates.core.push(bet);
         else if (checkTier(bet, CONFIG.value)) candidates.value.push(bet);
         else if (checkTier(bet, CONFIG.high_pot)) candidates.high_pot.push(bet);
@@ -166,7 +166,7 @@ function processDay(day, bets) {
     // C. Select Singles
     const selectedTiers = { core: [], value: [], high_pot: [] };
 
-    // Updated Sorter to include EV
+    // Sorter: Prob Desc > Conf Desc > SortScore Desc > EV Desc
     const sorter = (a, b) => {
         if (b.p_model !== a.p_model) return b.p_model - a.p_model;
         if (b.confidence_score !== a.confidence_score) return b.confidence_score - a.confidence_score;
@@ -181,9 +181,12 @@ function processDay(day, bets) {
     const finalHighPot = selectedTiers.high_pot.sort(sorter).slice(0, CONFIG.high_pot.limit_count);
 
     // D. Generate Combos
+
+    // 1. Identify Match IDs for Reuse Policy
     const coreIds = new Set(finalCore.map(b => b.match_id));
     const valueIds = new Set(finalValue.map(b => b.match_id));
     const highPotIds = new Set(finalHighPot.map(b => b.match_id));
+
     const allSinglesIds = new Set([...coreIds, ...valueIds, ...highPotIds]);
 
     // Determine Allowed Reuse based on Policy
@@ -210,30 +213,32 @@ function processDay(day, bets) {
 
     // 1. CORE DOUBLE
     let pool = getDoubleCandidates(CONFIG.combos.core_double.max_leg_odds);
-    if (pool.length >= 2) {
+    const coreDouble = pickBestDouble(pool, CONFIG.combos.core_double.min_total);
+
+    if (coreDouble) {
         combos.core_double = {
             type: "CORE DOUBLE",
-            legs: [pool[0], pool[1]],
-            total_odds: parseFloat((pool[0].odds * pool[1].odds).toFixed(2))
+            ...coreDouble
         };
-        comboUsedMatches.add(pool[0].match_id);
-        comboUsedMatches.add(pool[1].match_id);
-    } else if (pool.length < 2) {
-        combos.debug.push(`Skipped Core Double: Not enough legs <= ${CONFIG.combos.core_double.max_leg_odds} (Found: ${pool.length})`);
+        comboUsedMatches.add(coreDouble.legs[0].match_id);
+        comboUsedMatches.add(coreDouble.legs[1].match_id);
+    } else {
+        combos.debug.push(`Skipped Core Double: No pair meets min_total ${CONFIG.combos.core_double.min_total} (Pool: ${pool.length})`);
     }
 
     // 2. SMART DOUBLE
     pool = getDoubleCandidates(CONFIG.combos.smart_double.max_leg_odds);
-    if (pool.length >= 2) {
+    const smartDouble = pickBestDouble(pool, CONFIG.combos.smart_double.min_total);
+
+    if (smartDouble) {
         combos.smart_double = {
             type: "SMART DOUBLE",
-            legs: [pool[0], pool[1]],
-            total_odds: parseFloat((pool[0].odds * pool[1].odds).toFixed(2))
+            ...smartDouble
         };
-        comboUsedMatches.add(pool[0].match_id);
-        comboUsedMatches.add(pool[1].match_id);
-    } else if (pool.length < 2) {
-        combos.debug.push(`Skipped Smart Double: Not enough legs <= ${CONFIG.combos.smart_double.max_leg_odds} (Found: ${pool.length})`);
+        comboUsedMatches.add(smartDouble.legs[0].match_id);
+        comboUsedMatches.add(smartDouble.legs[1].match_id);
+    } else {
+        combos.debug.push(`Skipped Smart Double: No pair meets min_total ${CONFIG.combos.smart_double.min_total} (Pool: ${pool.length})`);
     }
 
     // 3. MID COMBO
@@ -274,33 +279,28 @@ function processDay(day, bets) {
 
 /**
  * Sanitize and Validate Bet Object
- * - Ensures match_id exists
- * - Parses numeric fields to Numbers (handling strings, nulls)
- * - Returns null if invalid
  */
 function sanitizeBet(bet) {
     if (!bet.match_id) return null;
 
-    // Helper to parse float safely
     const parseNum = (val) => {
         if (typeof val === 'number') return isNaN(val) ? 0 : val;
         if (typeof val === 'string') {
             const parsed = parseFloat(val);
             return isNaN(parsed) ? 0 : parsed;
         }
-        return 0; // Default for null/undefined
+        return 0;
     };
 
-    // Helper for Odds (Strict: must be > 1.0)
     const parseOdds = (val) => {
         const n = parseNum(val);
         return n > 1.0 ? n : 0;
     };
 
-    const cleanBet = { ...bet }; // Shallow copy
+    const cleanBet = { ...bet };
 
     cleanBet.odds = parseOdds(bet.odds);
-    if (cleanBet.odds === 0) return null; // Invalid odds -> Skip
+    if (cleanBet.odds === 0) return null;
 
     cleanBet.p_model = parseNum(bet.p_model);
     cleanBet.confidence_score = parseNum(bet.confidence_score);
@@ -318,6 +318,35 @@ function checkTier(bet, tierConfig) {
         bet.odds >= tierConfig.odds_min &&
         bet.odds <= tierConfig.odds_max
     );
+}
+
+/**
+ * Searches for the "safest" pair that meets the minimum total odds requirement.
+ * Safest = lowest total odds that is >= minTotal.
+ */
+function pickBestDouble(pool, minTotal, maxCheck = 25) {
+    const n = Math.min(pool.length, maxCheck);
+    let best = null;
+
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+            const a = pool[i], b = pool[j];
+            const total = a.odds * b.odds;
+
+            if (total >= minTotal) {
+                const candidate = {
+                    legs: [a, b],
+                    total_odds: parseFloat(total.toFixed(2))
+                };
+
+                // Safest approach: choose smallest total that passes minTotal
+                if (!best || candidate.total_odds < best.total_odds) {
+                    best = candidate;
+                }
+            }
+        }
+    }
+    return best;
 }
 
 function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuseIds) {
