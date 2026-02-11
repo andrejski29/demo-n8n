@@ -1,8 +1,11 @@
 /**
- * Combo Board Node (Multi-Day Portfolio Generator)
+ * Combo Board Node (v1.1 - Hardening & Reliability)
  *
- * Objective: Generate optimized combos (Safe, Balanced, Booster) across a multi-day window.
- * Logic: Inherits sanitation/dedup from Daily Picks Selector but operates on a global filtered pool.
+ * Changelog v1.1:
+ * - Sanitation: Added `sort_score` parsing.
+ * - Logic: Added Market Family fallback and deterministic Dedup.
+ * - Input: Strict Window Validation (Start/End required).
+ * - Optimization: Configurable search depth per bucket.
  */
 
 // ============================================================================
@@ -37,6 +40,7 @@ const CONFIG_MULTI = {
             confidence_min: 70,
             ev_min: 0.01,
             max_pool_considered: 28,
+            search_depth: 15,
             weights: { prob: 10000, conf: 100, ev: 10, odds: 1.0 }
         },
         balanced: {
@@ -47,6 +51,7 @@ const CONFIG_MULTI = {
             confidence_min: 65,
             ev_min: 0.02,
             max_pool_considered: 35,
+            search_depth: 15,
             weights: { prob: 10000, conf: 90, ev: 12, odds: 0.9 }
         },
         booster: {
@@ -57,6 +62,7 @@ const CONFIG_MULTI = {
             confidence_min: 60,
             ev_min: 0.03,
             max_pool_considered: 45,
+            search_depth: 25, // Deeper search for booster
             weights: { prob: 9000, conf: 80, ev: 20, odds: 0.6 }
         }
     }
@@ -66,6 +72,14 @@ const CONFIG_MULTI = {
  * Main Entry Point
  */
 function generateComboBoard(allBets, windowStart, windowEnd) {
+    // 0. Strict Window Validation
+    if (!windowStart || !windowEnd) {
+        return { error: "Window Start and End dates are required (YYYY-MM-DD)." };
+    }
+    if (windowStart > windowEnd) {
+        return { error: `Invalid Window: Start (${windowStart}) is after End (${windowEnd})` };
+    }
+
     // 1. Filter by Window & Basic Quality
     const validPool = filterAndSanitize(allBets, windowStart, windowEnd);
 
@@ -111,9 +125,6 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
         for (const legCount of config.legs_allowed) {
             const combo = findBestCombo(bucketCandidates, legCount, config);
             if (combo) {
-                // If we found a valid combo, checks if it's better than previous legCount result?
-                // Usually heuristic: simpler (fewer legs) is better if it meets criteria.
-                // Or compare scores.
                 if (!bestCombo || combo.score > bestCombo.score) {
                     bestCombo = combo;
                 }
@@ -125,7 +136,7 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
                 type: type.toUpperCase(),
                 legs: bestCombo.legs,
                 total_odds: bestCombo.total_odds,
-                score: bestCombo.score // Useful for internal verification
+                // score removed for clean output
             };
 
             // Mark used
@@ -134,9 +145,6 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
             result.debug.push(`No ${type} combo found (Pool: ${bucketCandidates.length})`);
         }
     });
-
-    // Cleanup internal scores
-    Object.values(result.combos).forEach(c => delete c.score);
 
     return result;
 }
@@ -171,7 +179,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV
+            // Tie-breaker: P > Conf > Sort > EV > ID (Deterministic)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -179,6 +187,9 @@ function deduplicateBets(bets) {
                     if (b.sort_score > existing.sort_score) best[b.match_id] = b;
                     else if (b.sort_score === existing.sort_score) {
                         if (b.ev > existing.ev) best[b.match_id] = b;
+                        else if (b.ev === existing.ev) {
+                            if (b.match_id > existing.match_id) best[b.match_id] = b;
+                        }
                     }
                 }
             }
@@ -191,14 +202,35 @@ function sanitizeBet(bet) {
     if (!bet.match_id) return null;
     const clean = { ...bet };
 
+    // Parse Numerics
     clean.odds = parseFloat(bet.odds) || 0;
     if (clean.odds <= 1.0) return null;
 
     clean.p_model = parseFloat(bet.p_model) || 0;
     clean.confidence_score = parseFloat(bet.confidence_score) || 0;
+    clean.sort_score = parseFloat(bet.sort_score) || 0; // Added parsing
     clean.ev = parseFloat(bet.ev) || 0;
 
+    // Market Family Fallback
+    if (!clean.market_family || clean.market_family === 'unknown') {
+        clean.market_family = deriveMarketFamily(clean);
+    }
+
     return clean;
+}
+
+function deriveMarketFamily(bet) {
+    const m = (bet.market || "").toLowerCase();
+    const c = (bet.category || "").toLowerCase();
+
+    if (m.includes('corner') || c.includes('corner')) return 'corners_ou'; // simplified
+    if (m.includes('card') || c.includes('card') || c.includes('book')) return 'cards_total';
+    if (m.includes('btts') || m.includes('both teams')) return 'goals_btts';
+    if (m.includes('over') || m.includes('under')) return 'goals_ou';
+    if (m.includes('1x2') || m.includes('winner')) return 'result_1x2';
+    if (m.includes('clean sheet')) return 'defense_cs';
+
+    return 'default';
 }
 
 const sorter = (a, b) => {
@@ -206,7 +238,7 @@ const sorter = (a, b) => {
     if (b.confidence_score !== a.confidence_score) return b.confidence_score - a.confidence_score;
     if (b.sort_score !== a.sort_score) return b.sort_score - a.sort_score;
     if (b.ev !== a.ev) return b.ev - a.ev;
-    return (a.match_id || 0) - (b.match_id || 0);
+    return (a.match_id || 0) - (b.match_id || 0); // Deterministic Tie-Breaker
 };
 
 /**
@@ -216,6 +248,7 @@ const sorter = (a, b) => {
 function findBestCombo(pool, targetLegs, config) {
     let best = null;
     const maxSameFamily = CONFIG_MULTI.diversity.max_same_family;
+    const searchDepth = config.search_depth || 15;
 
     const search = (index, currentLegs, currentOdds, familyCounts) => {
         // Base Case: Full Combo
@@ -233,8 +266,8 @@ function findBestCombo(pool, targetLegs, config) {
             return;
         }
 
-        // Optimization: Don't scan entire pool if deep
-        const limit = Math.min(pool.length, index + 15);
+        // Optimization: Configurable Search Depth
+        const limit = Math.min(pool.length, index + searchDepth);
 
         for (let i = index; i < limit; i++) {
             const leg = pool[i];
@@ -262,7 +295,6 @@ function calculateScore(legs, totalOdds, weights) {
     let pairProb = 1;
     let minConf = 100;
     let sumEV = 0;
-    let sameFamilyCount = 0;
 
     // Calculate metrics
     legs.forEach(l => {
@@ -296,31 +328,34 @@ function calculateScore(legs, totalOdds, weights) {
 if (typeof items !== 'undefined' && Array.isArray(items)) {
     try {
         let input = [];
-        let windowStart = new Date().toISOString().substring(0, 10);
-        let windowEnd = windowStart;
+        let windowStart = null;
+        let windowEnd = null;
 
-        // Parse Inputs
-        // Expecting either items[0].json with 'data' and 'config'
-        // OR standard items list where we might use n8n node parameters (not available here directly)
-        // Let's assume input items ARE the bets, and we get window from items[0].json.window if present
-
+        // Parse Inputs: Detect wrapper vs flat list
         if (items.length > 0 && items[0].json && items[0].json.bets && Array.isArray(items[0].json.bets)) {
-            // Mode: Wrapper object
+            // Wrapper Object Mode
             input = items[0].json.bets;
             if (items[0].json.window) {
-                windowStart = items[0].json.window.start || windowStart;
-                windowEnd = items[0].json.window.end || windowEnd;
+                windowStart = items[0].json.window.start;
+                windowEnd = items[0].json.window.end;
             }
         } else {
-            // Mode: Flat list
-            input = items.map(i => i.json);
-            // Default window: Look at data range or Today?
-            // For safety, require window injection or scan all.
-            // Let's scan all if not provided (sets window to min/max of data)
-            const dates = input.map(b => b.date_iso).filter(d => d).sort();
-            if (dates.length > 0) {
-                windowStart = dates[0].substring(0, 10);
-                windowEnd = dates[dates.length - 1].substring(0, 10);
+            // Flat List Mode: Require window params via some mechanism or fail
+            // Actually, spec prefers explicit window config.
+            // If n8n node parameters are available, we'd use them.
+            // Assuming for now inputs might carry 'window' property?
+            // Fallback: If no window provided, return error as per requirement 4
+            // But to be helpful in dev, we can scan if not provided?
+            // "I prefer Option A strictly: require window.start and window.end" -> Fail if missing
+
+            // NOTE: In n8n 'Function', params are usually in 'items', or hardcoded.
+            // We will return Error if undefined.
+
+            // Check if first item has config metadata?
+            if (items[0].json.window_start && items[0].json.window_end) {
+                 windowStart = items[0].json.window_start;
+                 windowEnd = items[0].json.window_end;
+                 input = items.map(i => i.json);
             }
         }
 
