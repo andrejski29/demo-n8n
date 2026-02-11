@@ -7,7 +7,7 @@ function getInput() {
   if (typeof item !== 'undefined' && item.json) return item.json;
   if (typeof items !== 'undefined' && items.length > 0 && items[0].json) return items[0].json;
   if (typeof $input !== 'undefined' && $input.item) return $input.item.json;
-  if (typeof data !== 'undefined') return data; 
+  if (typeof data !== 'undefined') return data;
   return {};
 }
 
@@ -52,7 +52,7 @@ const qa = initQA(isAlreadyNormalized ? "normalized" : "raw");
 
 // --- 4. Logic Branching: Passthrough & MIGRATION (V5.2) ---
 if (isAlreadyNormalized) {
-    qa.status = "warning"; 
+    qa.status = "warning";
     qa.warnings.push("input_already_normalized");
 
     // Preserve existing QA info if present
@@ -99,10 +99,10 @@ if (isAlreadyNormalized) {
 
         Object.keys(raw.odds.best).forEach(key => {
             let newKey = key;
-            
+
             // Map sh_ -> 2h_
             if (key.startsWith("sh_")) newKey = key.replace("sh_", "2h_");
-            
+
             // Map dc keys (legacy -> canonical)
             if (key === "dc_home_draw") newKey = "dc_1x";
             if (key === "dc_home_away") newKey = "dc_12";
@@ -171,14 +171,14 @@ const matchId = raw.match_id || raw.id;
 function isValidOdds(val) {
   if (val === undefined || val === null || val === "") return false;
   const n = Number(val);
-  return Number.isFinite(n) && n > 1.0; 
+  return Number.isFinite(n) && n > 1.0;
 }
 
 function normalizePercent(val) {
   if (val === undefined || val === null) return null;
   const n = Number(val);
   if (!Number.isFinite(n)) return null;
-  if (n > 1) return Number((n / 100).toFixed(4)); 
+  if (n > 1) return Number((n / 100).toFixed(4));
   return Number(n.toFixed(4));
 }
 
@@ -207,7 +207,7 @@ function generateGroups(bestOdds) {
             if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(key);
         }
-        
+
         // New Corner Keys
         const cornerMatch = key.match(/^corners_ou_(over|under)_([\d.]+)$/);
         if (cornerMatch) {
@@ -216,7 +216,7 @@ function generateGroups(bestOdds) {
             if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(key);
         }
-        
+
         // Legacy Corner Keys (Support Alias)
         const legacyMatch = key.match(/^corners_(over|under)_([\d.]+)$/);
         if (legacyMatch) {
@@ -296,9 +296,9 @@ const FLAT_ODDS_MAP = {
 // Regex Mappings (New + Legacy Support)
 const FLAT_REGEX_MAP = [
   // New Standard
-  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` }, 
+  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` },
   { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_ou_under_${m[1]/10}` },
-  
+
   // Legacy Alias (Generate duplicate key for compat, marked as legacy later)
   { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_over_${m[1]/10}`, isLegacy: true },
   { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_under_${m[1]/10}`, isLegacy: true },
@@ -307,7 +307,7 @@ const FLAT_REGEX_MAP = [
 function flatKeyToMarketKeys(flatKey) {
   const results = [];
   if (FLAT_ODDS_MAP[flatKey]) results.push({ key: FLAT_ODDS_MAP[flatKey], isLegacy: false });
-  
+
   for (const r of FLAT_REGEX_MAP) {
     const match = flatKey.match(r.pattern);
     if (match) {
@@ -438,7 +438,7 @@ for (const key of Object.keys(raw)) {
   if (key.startsWith("odds_")) {
     const marketMaps = flatKeyToMarketKeys(key); // Fix: Correct function name
     const val = raw[key];
-    
+
     if (!isValidOdds(val)) {
       if (val !== 0 && val !== -1) qa.markets_skipped_invalid++;
       continue;
@@ -462,7 +462,7 @@ if (odds_comparison) {
   for (const [category, selections] of Object.entries(odds_comparison)) {
     for (const [selection, books] of Object.entries(selections)) {
       const marketMaps = toMarketKeys(category, selection);
-      
+
       if (marketMaps.length === 0) {
         // Only warn if category seems relevant (simple heuristic)
         if (!category.includes(" handicap")) qa.warnings.push(`Comparison unmapped: ${category} -> ${selection}`);
@@ -536,7 +536,7 @@ const signals = {
     away: Number(team_b_xg_prematch || 0),
     total: Number(total_xg_prematch || 0)
   },
-  potentials: {} 
+  potentials: {}
 };
 
 // QA Signals
@@ -604,7 +604,7 @@ const outputItem = {
   signals: signals,
   odds: {
     best: bestOdds,
-    groups: oddsGroups, 
+    groups: oddsGroups,
     sources: {
       flat: flatSources,
       comparison: comparisonSources

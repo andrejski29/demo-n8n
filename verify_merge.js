@@ -11,20 +11,20 @@
  */
 
 // ------------------------- Input Simulation -------------------------
-// In n8n, if you use a "Merge" node (Mode: Combine, Join by Position or ID), 
-// you might get a single merged item. 
+// In n8n, if you use a "Merge" node (Mode: Combine, Join by Position or ID),
+// you might get a single merged item.
 // IF you pass them as two separate inputs to a Code node:
 // const seasonData = $input.item.json (from Input 1)
 // const formData = $input.item.json (from Input 2)
 //
-// Assuming the user wants a Code Node that takes the *collection* of items 
+// Assuming the user wants a Code Node that takes the *collection* of items
 // (likely flattened or appended upstream) and merges them into one object.
 
 const mergeTeamData = (items) => {
   // We expect 2 items for the same team (or pairs if multiple matches)
   // Since n8n execution is per-item, we might receive an array of 2 items here
   // if they were appended.
-  
+
   if (!items || items.length < 2) {
     return { error: "Insufficient data for merge. Expected Season Stats + Form Stats." };
   }
@@ -43,7 +43,7 @@ const mergeTeamData = (items) => {
   }
 
   if (!seasonItem || !formItem) {
-    return { 
+    return {
         error: "Could not identify distinct Season and Form datasets.",
         debug: { seasonFound: !!seasonItem, formFound: !!formItem }
     };
@@ -61,12 +61,12 @@ const mergeTeamData = (items) => {
   // 3. Construct Final Object
   // We prioritize the explicit structure requested:
   // "cleanly merge ... making it explicit that this one corresponds to the home team"
-  
+
   const merged = {
     match_id: seasonItem.match_id ?? formItem.match_id, // Recovery
     side: seasonItem.side,
     team_meta: seasonItem.team, // ID, Name, Season, etc.
-    
+
     // Global Season Stats
     season_stats: {
       features: seasonItem.features,

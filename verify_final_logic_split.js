@@ -11,8 +11,8 @@ const items = [
           stats: {
             seasonMatchesPlayed_overall: 10,
             shots_recorded_matches_num_overall: 10,
-            shot_conversion_rate_overall: 15, 
-            cardsTotal_overall: 5, 
+            shot_conversion_rate_overall: 15,
+            cardsTotal_overall: 5,
             additional_info: {
               corners_fh_avg_overall: 2.5
             }
@@ -28,14 +28,14 @@ const runSimulation = (inputItem, forcedSide) => {
     const input = inputItem.json;
     // --- LOGIC FROM final_node_*.js START ---
     // New: Identity & Side extraction (match_id/side passthrough)
-    
+
     // In Home Node: const side = input?.side ?? "home";
     // In Away Node: const side = input?.side ?? "away";
-    
+
     const side = input?.side ?? forcedSide; // Simulating the hard-coded value
     const match_id = input?.match_id ?? input?.fixture_id ?? null;
     // --- LOGIC END ---
-    
+
     return { side, match_id };
 };
 
@@ -51,5 +51,5 @@ console.log(JSON.stringify(awayResult, null, 2));
 const itemsWithSide = [{ json: { ...items[0].json, side: "neutral" } }];
 console.log("\nTesting Priority (Input side 'neutral' vs Default):");
 // Note: The code uses ?? so input.side takes precedence if not null/undefined.
-const priorityResult = runSimulation(itemsWithSide[0], "home"); 
+const priorityResult = runSimulation(itemsWithSide[0], "home");
 console.log(JSON.stringify(priorityResult, null, 2));

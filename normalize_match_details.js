@@ -79,7 +79,7 @@ const ODDS_MAPPING = {
   },
   "Goals Over/Under": {
     type: "over_under",
-    is_line_market: true 
+    is_line_market: true
   },
   "1st Half Goals": {
     type: "over_under_1h",
@@ -94,7 +94,7 @@ const ODDS_MAPPING = {
 // --- 5. Helpers ---
 function getOddsStats(bookmakerObj) {
   if (!bookmakerObj || typeof bookmakerObj !== 'object') return null;
-  
+
   const values = Object.values(bookmakerObj)
     .map(v => parseFloat(v))
     .filter(v => !isNaN(v) && v > 1.0); // Filter valid odds
@@ -176,7 +176,7 @@ flat_mappings.forEach(map => {
 const outputItem = {
   match_id: id,
   match_status: status,
-  fixture_date: date_unix, 
+  fixture_date: date_unix,
   meta: {
     season: season,
     round_id: roundID,

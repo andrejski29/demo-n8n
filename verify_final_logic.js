@@ -24,7 +24,7 @@ const items = [
 ];
 
 // Load the code from final_node.js (simulated by reading file content and eval-ing relevant parts or just verifying logic structure via regex/grep if full eval is tricky due to n8n specific 'return' statements)
-// Actually, since final_node.js has a top-level return, I can't just require it. 
+// Actually, since final_node.js has a top-level return, I can't just require it.
 // I will copy the core logic into this test file to verify it runs correctly in Node environment.
 
 // ------------------------- COPIED LOGIC FROM final_node.js -------------------------
@@ -120,7 +120,7 @@ const coverageBlock = (S, mpO, mpH, mpA) => {
 
 const getDenom = (recVal, mpVal) => {
   const r = num(recVal);
-  return (isNum(r) && r > 0) ? r : mpVal; 
+  return (isNum(r) && r > 0) ? r : mpVal;
 };
 
 const addShotThresholdFamily = (features, S, scope, rec, mp, needFn) => {
@@ -142,12 +142,12 @@ const computeTeamFeatures = (teamObj) => {
   const S = { ...stats, ...add };
   const missing = [];
   const need = (k) => { if (S[k] === undefined || S[k] === null || S[k] === "") missing.push(k); };
-  
+
   const mpO = num(S.seasonMatchesPlayed_overall);
   const shotsRecO = num(S.shots_recorded_matches_num_overall);
 
   const features = {};
-  
+
   // TWEAK 2: Shots with fallback denominator
   // S.match_shots_over225_num_overall is undefined in mock, so prob should be null, but denominator logic runs
   addShotThresholdFamily(features, S, "overall", shotsRecO, mpO, need);

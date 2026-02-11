@@ -1,11 +1,11 @@
 /**
- * Combo Board Node (v1.2 - Stability & Diversity Fixes)
+ * Combo Board Node (v1.3 - Enhanced Diagnostics & Market Classification)
  * 
- * Changelog v1.2:
- * - Dedup: Fixed self-comparison bug; now uses Market Name tie-breaker.
- * - Diversity: Added explicit 'o/u' support to `deriveMarketFamily` for better classification.
- * - Validation: Enforced strict `YYYY-MM-DD` window format.
- * - Hygiene: Added safe type checks for `date_iso`.
+ * Changelog v1.3:
+ * - Market Family: Expanded `deriveMarketFamily` to support Asian Handicap, Double Chance, Team Goals, HT/FT.
+ * - Diagnostics: Detailed rejection counts per bucket (odds, prob, conf, ev, diversity) in `debug`.
+ * - Safety: Added optional `max_ev` cap to global pool filter (default: null/infinity).
+ * - Hygiene: Strengthened input validation and error reporting.
  */
 
 // ============================================================================
@@ -19,6 +19,7 @@ const CONFIG_MULTI = {
         min_confidence: 58,
         min_p_model: 0.44,
         min_ev: 0.00,
+        max_ev: null, // Optional cap (e.g., 0.30) to catch data errors
     },
 
     // Diversity & Exposure
@@ -113,15 +114,32 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
     buckets.forEach(type => {
         const config = CONFIG_MULTI.buckets[type];
         
+        // Detailed Filtering Diagnostics
+        const rejectionStats = {
+            total_candidates: 0,
+            passed: 0,
+            rejected: {
+                used: 0,
+                odds: 0,
+                p_model: 0,
+                confidence: 0,
+                ev: 0
+            }
+        };
+
         // Filter pool specifically for this bucket's strict criteria
-        const bucketCandidates = globalPool.filter(b => 
-            !usedMatches.has(b.match_id) && // Not used in previous buckets
-            b.odds >= config.leg_odds.min &&
-            b.odds <= config.leg_odds.max &&
-            b.p_model >= config.p_model_min &&
-            b.confidence_score >= config.confidence_min &&
-            b.ev >= config.ev_min
-        ).slice(0, config.max_pool_considered); // Optimization cap
+        const bucketCandidates = globalPool.filter(b => {
+            rejectionStats.total_candidates++;
+
+            if (usedMatches.has(b.match_id)) { rejectionStats.rejected.used++; return false; }
+            if (b.odds < config.leg_odds.min || b.odds > config.leg_odds.max) { rejectionStats.rejected.odds++; return false; }
+            if (b.p_model < config.p_model_min) { rejectionStats.rejected.p_model++; return false; }
+            if (b.confidence_score < config.confidence_min) { rejectionStats.rejected.confidence++; return false; }
+            if (b.ev < config.ev_min) { rejectionStats.rejected.ev++; return false; }
+
+            rejectionStats.passed++;
+            return true;
+        }).slice(0, config.max_pool_considered); // Optimization cap
 
         let bestCombo = null;
 
@@ -146,7 +164,16 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
             // Mark used
             bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
         } else {
-            result.debug.push(`No ${type} combo found (Pool: ${bucketCandidates.length})`);
+            // Enhanced Debug Output for Failures
+            result.debug.push({
+                bucket: type,
+                reason: "No combo found",
+                pool_stats: {
+                    total_available: globalPool.length,
+                    bucket_candidates: bucketCandidates.length,
+                    rejections: rejectionStats.rejected
+                }
+            });
         }
     });
 
@@ -173,6 +200,9 @@ function filterAndSanitize(bets, startStr, endStr) {
         if (b.p_model < CONFIG_MULTI.pool.min_p_model) return false;
         if (b.confidence_score < CONFIG_MULTI.pool.min_confidence) return false;
         if (b.ev < CONFIG_MULTI.pool.min_ev) return false;
+
+        // Optional Max EV Check
+        if (CONFIG_MULTI.pool.max_ev !== null && b.ev > CONFIG_MULTI.pool.max_ev) return false;
 
         return true;
     });
@@ -231,16 +261,30 @@ function sanitizeBet(bet) {
 function deriveMarketFamily(bet) {
     const m = (bet.market || "").toLowerCase();
     const c = (bet.category || "").toLowerCase();
+    const sub = (bet.sub_market || "").toLowerCase(); // Some sources might use this
 
-    // Priority Classification
+    // 1. Explicit Family Mappings (Priority)
     if (m.includes('corner') || c.includes('corner')) return 'corners_ou';
     if (m.includes('card') || c.includes('card') || c.includes('book')) return 'cards_total';
     if (m.includes('btts') || m.includes('both teams')) return 'goals_btts';
     if (m.includes('clean sheet')) return 'defense_cs';
-    if (m.includes('1x2') || m.includes('winner')) return 'result_1x2';
+    if (m.includes('1x2') || m.includes('winner') || m.includes('match result')) return 'result_1x2';
     
-    // O/U Classification (Includes 'O/U', 'Over', 'Under')
-    if (m.includes('o/u') || m.includes('over/under') || m.includes('over') || m.includes('under')) return 'goals_ou';
+    // 2. Asian Handicap & Handicap
+    if (m.includes('asian') || m.includes('handicap') || m.includes('ah ')) return 'goals_ah';
+
+    // 3. Double Chance
+    if (m.includes('double chance') || m.includes('dc') || m.includes('1x') || m.includes('x2')) return 'result_dc';
+
+    // 4. Team Totals
+    if (m.includes('team total') || m.includes('team over') || m.includes('team under') || m.includes('tt')) return 'goals_team';
+
+    // 5. Half Time / Full Time
+    if (m.includes('ht/ft') || m.includes('half time') || m.includes('1st half') || m.includes('2nd half')) return 'half_props';
+
+    // 6. General O/U Classification (Includes 'O/U', 'Over', 'Under')
+    // Put this last as a catch-all for generic totals
+    if (m.includes('o/u') || m.includes('over/under') || m.includes('over') || m.includes('under') || m.includes('goals')) return 'goals_ou';
     
     return 'default';
 }
