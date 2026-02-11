@@ -2,10 +2,11 @@
  * Combo Board Node (v1.3 Final - Hardening & Config Polish)
  * 
  * Changelog v1.3 Final:
- * - Diagnostics: Recursion-level counters (pruned, diversity reject, valid combos).
- * - Determinism: Added final tie-breaker (selection string) to remove input order dependency.
+ * - Diagnostics: Recursion-level counters (odds_out_of_range, diversity reject, valid combos).
+ * - Determinism: Added final tie-breaker (selection string, then odds) to remove input order dependency.
  * - Config: Implemented `allow_cross_bucket_reuse` flag.
- * - Market Family: Improved Double Chance regex safety and added Draw No Bet (DNB).
+ * - Market Family: Improved Double Chance/DNB regex safety and split DNB into `result_dnb`.
+ * - Validation: Added strict array check for input.
  */
 
 // ============================================================================
@@ -73,7 +74,11 @@ const CONFIG_MULTI = {
  * Main Entry Point
  */
 function generateComboBoard(allBets, windowStart, windowEnd) {
-    // 0. Strict Window Validation
+    // 0. Strict Validation
+    if (!Array.isArray(allBets)) {
+        return { error: "Input must be an array of bets." };
+    }
+
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     if (!windowStart || !windowEnd) {
         return { error: "Window Start and End dates are required (YYYY-MM-DD)." };
@@ -143,14 +148,14 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
         }).slice(0, config.max_pool_considered); // Optimization cap
 
         let bestCombo = null;
-        let searchStatsTotal = { pruned_odds: 0, rejected_diversity: 0, valid_found: 0 };
+        let searchStatsTotal = { odds_out_of_range: 0, rejected_diversity: 0, valid_found: 0 };
 
         // Try allowed leg counts (smallest first usually)
         for (const legCount of config.legs_allowed) {
             const { combo, stats } = findBestCombo(bucketCandidates, legCount, config);
 
             // Aggregate stats
-            searchStatsTotal.pruned_odds += stats.pruned_odds;
+            searchStatsTotal.odds_out_of_range += stats.odds_out_of_range;
             searchStatsTotal.rejected_diversity += stats.rejected_diversity;
             searchStatsTotal.valid_found += stats.valid_found;
 
@@ -224,7 +229,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection (Deterministic)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Deterministic)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -238,10 +243,15 @@ function deduplicateBets(bets) {
                             const em = String(existing.market || "");
                             if (bm > em) best[b.match_id] = b;
                             else if (bm === em) {
-                                // Final Tie-Breaker: Selection Name
+                                // Selection Name
                                 const bs = String(b.selection || b.runner || "");
                                 const es = String(existing.selection || existing.runner || "");
                                 if (bs > es) best[b.match_id] = b;
+                                else if (bs === es) {
+                                    // Final Tie-Breaker: Odds (Higher is generally preferred in equal stats, or just deterministic)
+                                    // Actually, if P is same, higher odds = higher EV usually, but let's stick to simple determinism.
+                                    if (b.odds > existing.odds) best[b.match_id] = b;
+                                }
                             }
                         }
                     }
@@ -286,11 +296,14 @@ function deriveMarketFamily(bet) {
     // 1X2 Safety: Ensure not capturing 'Double Chance' via substring
     if ((m.includes('1x2') || m.includes('winner') || m.includes('match result')) && !m.includes('double chance')) return 'result_1x2';
 
-    // 2. Asian Handicap & Handicap & Draw No Bet
-    if (m.includes('asian') || m.includes('handicap') || m.includes('ah ') || m.includes('dnb') || m.includes('draw no bet')) return 'goals_ah';
+    // 2. Asian Handicap & Draw No Bet
+    // Split DNB to its own family for diversity
+    if (m.includes('dnb') || m.includes('draw no bet')) return 'result_dnb';
+    if (m.includes('asian') || m.includes('handicap') || /\bah\b/.test(m)) return 'goals_ah';
 
-    // 3. Double Chance (Safer Boundary Check)
-    if (m.includes('double chance') || m.includes('dc ') || /\b1x\b/.test(m) || /\bx2\b/.test(m)) return 'result_dc';
+    // 3. Double Chance (Safer Regex Boundary Check)
+    // Matches "Double Chance", "DC " (start), " DC" (end), or strict "1X"/"X2" words
+    if (m.includes('double chance') || /\bdc\b/.test(m) || /\b1x\b/.test(m) || /\bx2\b/.test(m)) return 'result_dc';
 
     // 4. Team Totals
     if (m.includes('team total') || m.includes('team over') || m.includes('team under') || m.includes('tt')) return 'goals_team';
@@ -323,7 +336,7 @@ function findBestCombo(pool, targetLegs, config) {
     const searchDepth = config.search_depth || 15;
 
     const stats = {
-        pruned_odds: 0,
+        odds_out_of_range: 0,
         rejected_diversity: 0,
         valid_found: 0
     };
@@ -342,7 +355,7 @@ function findBestCombo(pool, targetLegs, config) {
                     };
                 }
             } else {
-                stats.pruned_odds++; // Odds out of range at leaf
+                stats.odds_out_of_range++; // Leaf out of range (too low or too high)
             }
             return;
         }
@@ -356,7 +369,7 @@ function findBestCombo(pool, targetLegs, config) {
 
             // Pruning: Odds too high?
             if (newOdds > config.total_odds.max) {
-                 stats.pruned_odds++;
+                 stats.odds_out_of_range++;
                  continue;
             }
 
