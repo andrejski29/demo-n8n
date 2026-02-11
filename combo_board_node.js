@@ -1,11 +1,11 @@
 /**
- * Combo Board Node (v1.3 - Enhanced Diagnostics & Market Classification)
+ * Combo Board Node (v1.3 Final - Hardening & Config Polish)
  * 
- * Changelog v1.3:
- * - Market Family: Expanded `deriveMarketFamily` to support Asian Handicap, Double Chance, Team Goals, HT/FT.
- * - Diagnostics: Detailed rejection counts per bucket (odds, prob, conf, ev, diversity) in `debug`.
- * - Safety: Added optional `max_ev` cap to global pool filter (default: null/infinity).
- * - Hygiene: Strengthened input validation and error reporting.
+ * Changelog v1.3 Final:
+ * - Diagnostics: Recursion-level counters (pruned, diversity reject, valid combos).
+ * - Determinism: Added final tie-breaker (selection string) to remove input order dependency.
+ * - Config: Implemented `allow_cross_bucket_reuse` flag.
+ * - Market Family: Improved Double Chance regex safety and added Draw No Bet (DNB).
  */
 
 // ============================================================================
@@ -107,6 +107,7 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
 
     // Track used matches to prevent cross-bucket reuse
     const usedMatches = new Set();
+    const allowReuse = CONFIG_MULTI.reuse.allow_cross_bucket_reuse === true;
 
     // 4. Generate Buckets sequentially
     const buckets = ['safe', 'balanced', 'booster'];
@@ -131,7 +132,7 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
         const bucketCandidates = globalPool.filter(b => {
             rejectionStats.total_candidates++;
 
-            if (usedMatches.has(b.match_id)) { rejectionStats.rejected.used++; return false; }
+            if (!allowReuse && usedMatches.has(b.match_id)) { rejectionStats.rejected.used++; return false; }
             if (b.odds < config.leg_odds.min || b.odds > config.leg_odds.max) { rejectionStats.rejected.odds++; return false; }
             if (b.p_model < config.p_model_min) { rejectionStats.rejected.p_model++; return false; }
             if (b.confidence_score < config.confidence_min) { rejectionStats.rejected.confidence++; return false; }
@@ -142,10 +143,17 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
         }).slice(0, config.max_pool_considered); // Optimization cap
 
         let bestCombo = null;
+        let searchStatsTotal = { pruned_odds: 0, rejected_diversity: 0, valid_found: 0 };
 
         // Try allowed leg counts (smallest first usually)
         for (const legCount of config.legs_allowed) {
-            const combo = findBestCombo(bucketCandidates, legCount, config);
+            const { combo, stats } = findBestCombo(bucketCandidates, legCount, config);
+
+            // Aggregate stats
+            searchStatsTotal.pruned_odds += stats.pruned_odds;
+            searchStatsTotal.rejected_diversity += stats.rejected_diversity;
+            searchStatsTotal.valid_found += stats.valid_found;
+
             if (combo) {
                 if (!bestCombo || combo.score > bestCombo.score) {
                     bestCombo = combo;
@@ -172,7 +180,8 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
                     total_available: globalPool.length,
                     bucket_candidates: bucketCandidates.length,
                     rejections: rejectionStats.rejected
-                }
+                },
+                search_stats: searchStatsTotal
             });
         }
     });
@@ -215,7 +224,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name (Lexical)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection (Deterministic)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -227,7 +236,13 @@ function deduplicateBets(bets) {
                             // Lexical Compare on Market Name
                             const bm = String(b.market || "");
                             const em = String(existing.market || "");
-                            if (bm > em) best[b.match_id] = b; 
+                            if (bm > em) best[b.match_id] = b;
+                            else if (bm === em) {
+                                // Final Tie-Breaker: Selection Name
+                                const bs = String(b.selection || b.runner || "");
+                                const es = String(existing.selection || existing.runner || "");
+                                if (bs > es) best[b.match_id] = b;
+                            }
                         }
                     }
                 }
@@ -261,20 +276,21 @@ function sanitizeBet(bet) {
 function deriveMarketFamily(bet) {
     const m = (bet.market || "").toLowerCase();
     const c = (bet.category || "").toLowerCase();
-    const sub = (bet.sub_market || "").toLowerCase(); // Some sources might use this
 
     // 1. Explicit Family Mappings (Priority)
     if (m.includes('corner') || c.includes('corner')) return 'corners_ou';
     if (m.includes('card') || c.includes('card') || c.includes('book')) return 'cards_total';
     if (m.includes('btts') || m.includes('both teams')) return 'goals_btts';
     if (m.includes('clean sheet')) return 'defense_cs';
-    if (m.includes('1x2') || m.includes('winner') || m.includes('match result')) return 'result_1x2';
     
-    // 2. Asian Handicap & Handicap
-    if (m.includes('asian') || m.includes('handicap') || m.includes('ah ')) return 'goals_ah';
+    // 1X2 Safety: Ensure not capturing 'Double Chance' via substring
+    if ((m.includes('1x2') || m.includes('winner') || m.includes('match result')) && !m.includes('double chance')) return 'result_1x2';
 
-    // 3. Double Chance
-    if (m.includes('double chance') || m.includes('dc') || m.includes('1x') || m.includes('x2')) return 'result_dc';
+    // 2. Asian Handicap & Handicap & Draw No Bet
+    if (m.includes('asian') || m.includes('handicap') || m.includes('ah ') || m.includes('dnb') || m.includes('draw no bet')) return 'goals_ah';
+
+    // 3. Double Chance (Safer Boundary Check)
+    if (m.includes('double chance') || m.includes('dc ') || /\b1x\b/.test(m) || /\bx2\b/.test(m)) return 'result_dc';
 
     // 4. Team Totals
     if (m.includes('team total') || m.includes('team over') || m.includes('team under') || m.includes('tt')) return 'goals_team';
@@ -306,10 +322,17 @@ function findBestCombo(pool, targetLegs, config) {
     const maxSameFamily = CONFIG_MULTI.diversity.max_same_family;
     const searchDepth = config.search_depth || 15;
 
+    const stats = {
+        pruned_odds: 0,
+        rejected_diversity: 0,
+        valid_found: 0
+    };
+
     const search = (index, currentLegs, currentOdds, familyCounts) => {
         // Base Case: Full Combo
         if (currentLegs.length === targetLegs) {
             if (currentOdds >= config.total_odds.min && currentOdds <= config.total_odds.max) {
+                stats.valid_found++;
                 const score = calculateScore(currentLegs, currentOdds, config.weights);
                 if (!best || score > best.score) {
                     best = {
@@ -318,6 +341,8 @@ function findBestCombo(pool, targetLegs, config) {
                         score: score
                     };
                 }
+            } else {
+                stats.pruned_odds++; // Odds out of range at leaf
             }
             return;
         }
@@ -330,12 +355,18 @@ function findBestCombo(pool, targetLegs, config) {
             const newOdds = currentOdds * leg.odds;
 
             // Pruning: Odds too high?
-            if (newOdds > config.total_odds.max) continue;
+            if (newOdds > config.total_odds.max) {
+                 stats.pruned_odds++;
+                 continue;
+            }
 
             // Diversity Check
             const fam = leg.market_family || "unknown";
             const currentFamCount = familyCounts[fam] || 0;
-            if (currentFamCount >= maxSameFamily) continue;
+            if (currentFamCount >= maxSameFamily) {
+                stats.rejected_diversity++;
+                continue;
+            }
 
             // Recurse
             const nextFamilyCounts = { ...familyCounts, [fam]: currentFamCount + 1 };
@@ -344,7 +375,7 @@ function findBestCombo(pool, targetLegs, config) {
     };
 
     search(0, [], 1, {});
-    return best;
+    return { combo: best, stats };
 }
 
 function calculateScore(legs, totalOdds, weights) {
@@ -413,5 +444,5 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
 }
 
 if (typeof module !== 'undefined') {
-    module.exports = { generateComboBoard };
+    module.exports = { generateComboBoard, CONFIG_MULTI }; // Export Config for testing override
 }
