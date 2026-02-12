@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strict multi-stage tie-breaker (Market > Selection > Odds > Category > Date > ID > Fingerprint).
+ * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -233,7 +233,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO > ID > Fingerprint (Airtight Determinism)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO > ID > Fingerprint (Strict Determinism)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -270,11 +270,14 @@ function deduplicateBets(bets) {
                                                 const eid = String(existing.id || existing.bet_id || "");
                                                 if (bid > eid) best[b.match_id] = b;
                                                 else if (bid === eid) {
-                                                    // Ultimate Stable Fingerprint (Airtight)
-                                                    // Include fields that might differ even if above match
-                                                    // e.g. source, bookmaker, or just full stringify
-                                                    const bFp = JSON.stringify({ m: bm, s: bs, o: b.odds, c: bc, d: bd, src: b.bookmaker || b.source || "" });
-                                                    const eFp = JSON.stringify({ m: em, s: es, o: existing.odds, c: ec, d: ed, src: existing.bookmaker || existing.source || "" });
+                                                    // Ultimate Explicit Fingerprint (Airtight)
+                                                    // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
+                                                    const bSrc = String(b.bookmaker || b.source || "");
+                                                    const eSrc = String(existing.bookmaker || existing.source || "");
+
+                                                    const bFp = `${bm}|${bs}|${b.odds.toFixed(3)}|${bc}|${bd}|${bid}|${bSrc}`;
+                                                    const eFp = `${em}|${es}|${existing.odds.toFixed(3)}|${ec}|${ed}|${eid}|${eSrc}`;
+
                                                     if (bFp > eFp) best[b.match_id] = b;
                                                 }
                                             }
