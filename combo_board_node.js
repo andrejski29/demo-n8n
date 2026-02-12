@@ -2,11 +2,11 @@
  * Combo Board Node (v1.3 Final - Hardening & Config Polish)
  * 
  * Changelog v1.3 Final:
- * - Diagnostics: Recursion-level counters (odds_out_of_range, diversity reject, valid combos).
- * - Determinism: Added final tie-breaker (selection string, then odds) to remove input order dependency.
- * - Config: Implemented `allow_cross_bucket_reuse` flag.
- * - Market Family: Improved Double Chance/DNB regex safety and split DNB into `result_dnb`.
+ * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
+ * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
+ * - Determinism: Added strict 'selection' tie-breaker; documented Odds bias.
  * - Validation: Added strict array check for input.
+ * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
 
 // ============================================================================
@@ -20,7 +20,7 @@ const CONFIG_MULTI = {
         min_confidence: 58,
         min_p_model: 0.44,
         min_ev: 0.00,
-        max_ev: null, // Optional cap (e.g., 0.30) to catch data errors
+        max_ev: null, // Optional cap (e.g., 0.30) to catch data errors or unrealistic EVs
     },
 
     // Diversity & Exposure
@@ -148,14 +148,15 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
         }).slice(0, config.max_pool_considered); // Optimization cap
 
         let bestCombo = null;
-        let searchStatsTotal = { odds_out_of_range: 0, rejected_diversity: 0, valid_found: 0 };
+        let searchStatsTotal = { pruned_too_high: 0, leaf_out_of_range: 0, rejected_diversity: 0, valid_found: 0 };
 
         // Try allowed leg counts (smallest first usually)
         for (const legCount of config.legs_allowed) {
             const { combo, stats } = findBestCombo(bucketCandidates, legCount, config);
 
             // Aggregate stats
-            searchStatsTotal.odds_out_of_range += stats.odds_out_of_range;
+            searchStatsTotal.pruned_too_high += stats.pruned_too_high;
+            searchStatsTotal.leaf_out_of_range += stats.leaf_out_of_range;
             searchStatsTotal.rejected_diversity += stats.rejected_diversity;
             searchStatsTotal.valid_found += stats.valid_found;
 
@@ -248,8 +249,8 @@ function deduplicateBets(bets) {
                                 const es = String(existing.selection || existing.runner || "");
                                 if (bs > es) best[b.match_id] = b;
                                 else if (bs === es) {
-                                    // Final Tie-Breaker: Odds (Higher is generally preferred in equal stats, or just deterministic)
-                                    // Actually, if P is same, higher odds = higher EV usually, but let's stick to simple determinism.
+                                    // Final Tie-Breaker: Odds (Higher is strictly preferred as potential return)
+                                    // If Odds are also equal, input order prevails (truly identical bet metrics)
                                     if (b.odds > existing.odds) best[b.match_id] = b;
                                 }
                             }
@@ -305,8 +306,8 @@ function deriveMarketFamily(bet) {
     // Matches "Double Chance", "DC " (start), " DC" (end), or strict "1X"/"X2" words
     if (m.includes('double chance') || /\bdc\b/.test(m) || /\b1x\b/.test(m) || /\bx2\b/.test(m)) return 'result_dc';
 
-    // 4. Team Totals
-    if (m.includes('team total') || m.includes('team over') || m.includes('team under') || m.includes('tt')) return 'goals_team';
+    // 4. Team Totals (Safer Regex Boundary Check)
+    if (m.includes('team total') || m.includes('team over') || m.includes('team under') || /\btt\b/.test(m)) return 'goals_team';
 
     // 5. Half Time / Full Time
     if (m.includes('ht/ft') || m.includes('half time') || m.includes('1st half') || m.includes('2nd half')) return 'half_props';
@@ -336,7 +337,8 @@ function findBestCombo(pool, targetLegs, config) {
     const searchDepth = config.search_depth || 15;
 
     const stats = {
-        odds_out_of_range: 0,
+        pruned_too_high: 0,
+        leaf_out_of_range: 0,
         rejected_diversity: 0,
         valid_found: 0
     };
@@ -355,7 +357,7 @@ function findBestCombo(pool, targetLegs, config) {
                     };
                 }
             } else {
-                stats.odds_out_of_range++; // Leaf out of range (too low or too high)
+                stats.leaf_out_of_range++; // Leaf out of range (too low or too high)
             }
             return;
         }
@@ -369,7 +371,7 @@ function findBestCombo(pool, targetLegs, config) {
 
             // Pruning: Odds too high?
             if (newOdds > config.total_odds.max) {
-                 stats.odds_out_of_range++;
+                 stats.pruned_too_high++;
                  continue;
             }
 

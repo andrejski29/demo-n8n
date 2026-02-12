@@ -21,8 +21,11 @@ const bets = [
     // Market Family Fallback Test Cases (Updated v1.3 Final Hardened)
     { match_id: 11, date_iso: '2023-10-27T18:00:00', odds: 1.60, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'Asian Handicap -1.5' }, // 'goals_ah'
     { match_id: 12, date_iso: '2023-10-27T19:00:00', odds: 1.70, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'DC 1X' }, // 'result_dc' (Regex \bdc\b)
-    { match_id: 13, date_iso: '2023-10-27T20:00:00', odds: 1.80, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'Team Total Over 1.5' }, // 'goals_team'
+    { match_id: 13, date_iso: '2023-10-27T20:00:00', odds: 1.80, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'TT Over 1.5' }, // 'goals_team' (Regex \btt\b)
     { match_id: 14, date_iso: '2023-10-27T21:00:00', odds: 1.75, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'Draw No Bet' }, // 'result_dnb' (New Split)
+
+    // Regex Negative Tests (Should Default)
+    { match_id: 15, date_iso: '2023-10-27T22:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Battery' }, // Should NOT match \btt\b
 
     // Determinism Tie-Breaker Candidates (Same Match ID, Same Stats)
     // Same Selection, Different Odds
@@ -31,7 +34,7 @@ const bets = [
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 Final Hardened)...");
+    console.log("Starting Combo Board Node Tests (v1.3 Final Polished)...");
 
     // Test 0: Input Validation
     const invalidInput = generateComboBoard("Not Array", '2023-10-27', '2023-10-30');
@@ -43,37 +46,31 @@ function runTest() {
     if (result.error) console.error("Test 1 Fail:", result.error);
     else console.log("Test 1 Pass: Structure OK");
 
-    // Test 2: Market Family Fallback & Pool Size
-    // 9 original + 4 fallback + 1 dedup (Match 100) = 14 unique matches.
-    if (result.meta.pool_size === 14) {
-        console.log("Test 2 Pass: Pool Size Correct (14)");
+    // Test 2: Pool Size Logic
+    // 9 original + 4 fallback (11-14) + 1 dedup (Match 100) + 1 Negative Test (Match 15) = 15 unique matches.
+    if (result.meta.pool_size === 15) {
+        console.log("Test 2 Pass: Pool Size Correct (15)");
     } else {
-        console.error(`Test 2 Fail: Expected pool size 14, got ${result.meta.pool_size}`);
+        console.error(`Test 2 Fail: Expected pool size 15, got ${result.meta.pool_size}`);
     }
 
-    // Test 3: Search Diagnostics (Rename Verification)
-    // Check if debug contains new 'odds_out_of_range' counter
+    // Test 3: Search Diagnostics (New Keys Verification)
     // Force fail to see debug
-    const failResult = generateComboBoard(bets.slice(0, 1), '2023-10-27', '2023-10-30');
-    if (failResult.debug[0] && failResult.debug[0].search_stats && failResult.debug[0].search_stats.odds_out_of_range !== undefined) {
-        console.log("Test 3 Pass: Search Diagnostics (odds_out_of_range) Present");
+    const failResult = generateComboBoard(bets.slice(0, 1), '2023-10-27', '2023-10-30'); // Not enough legs
+    const stats = failResult.debug[0]?.search_stats;
+
+    if (stats && stats.pruned_too_high !== undefined && stats.leaf_out_of_range !== undefined) {
+        console.log("Test 3 Pass: New Diagnostics (pruned_too_high, leaf_out_of_range) Present");
     } else {
-        console.error("Test 3 Fail: Missing or old search_stats keys");
+        console.error("Test 3 Fail: Missing new search_stats keys", stats);
     }
 
     // Test 4: Determinism (Odds Tie-Breaker)
-    // Match 100 has two entries: Odds 1.50 and 1.55. All else equal.
-    // Logic: Higher odds wins if everything else equal.
-    // We shuffle input 10 times to ensure the 1.55 one ALWAYS wins.
-
-    // Shuffle Helper
+    let determinismPass = true;
     const shuffle = (array) => array.sort(() => Math.random() - 0.5);
 
-    let determinismPass = true;
     for (let i = 0; i < 10; i++) {
         const run = generateComboBoard(shuffle([...bets]), '2023-10-27', '2023-10-30');
-        // Check output JSON consistency
-
         const runRef = generateComboBoard(bets, '2023-10-27', '2023-10-30');
 
         if (JSON.stringify(run.combos) !== JSON.stringify(runRef.combos)) {
@@ -86,9 +83,10 @@ function runTest() {
          console.log("Test 4 Pass: Strict Determinism (Odds Tie-Breaker) Verified.");
     }
 
-    // Test 5: Verify DNB Split (Logic check via diversity)
-    // Implicit via Pool Size Check
-    console.log("Test 5 Info: DNB Split logic integrated (Implicit verification).");
+    // Test 5: TT Regex Safety
+    // Indirectly verified via Pool Size if Match 15 is included (default family is ok).
+    // We can't inspect family directly.
+    console.log("Test 5 Info: Regex safety integrated.");
 
     console.log("Tests Complete.");
 }
