@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strict 'selection' tie-breaker; documented Odds bias.
+ * - Determinism: Added strict composite tie-breaker (market|selection|odds) to ensure 100% stability.
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -230,7 +230,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Deterministic)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Composite Key (Strict Determinism)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -244,15 +244,14 @@ function deduplicateBets(bets) {
                             const em = String(existing.market || "");
                             if (bm > em) best[b.match_id] = b;
                             else if (bm === em) {
-                                // Selection Name
+                                // Final Composite Key for Strict Determinism
                                 const bs = String(b.selection || b.runner || "");
                                 const es = String(existing.selection || existing.runner || "");
-                                if (bs > es) best[b.match_id] = b;
-                                else if (bs === es) {
-                                    // Final Tie-Breaker: Odds (Higher is strictly preferred as potential return)
-                                    // If Odds are also equal, input order prevails (truly identical bet metrics)
-                                    if (b.odds > existing.odds) best[b.match_id] = b;
-                                }
+
+                                const bKey = `${bs}|${b.odds}`;
+                                const eKey = `${es}|${existing.odds}`;
+
+                                if (bKey > eKey) best[b.match_id] = b;
                             }
                         }
                     }

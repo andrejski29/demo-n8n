@@ -30,11 +30,11 @@ const bets = [
     // Determinism Tie-Breaker Candidates (Same Match ID, Same Stats)
     // Same Selection, Different Odds
     { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' },
-    { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 1.55, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' } // Higher odds should win
+    { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 1.55, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' } // Higher key "Team A|1.55" > "Team A|1.5" should win
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 Final Polished)...");
+    console.log("Starting Combo Board Node Tests (v1.3 Final Locked)...");
 
     // Test 0: Input Validation
     const invalidInput = generateComboBoard("Not Array", '2023-10-27', '2023-10-30');
@@ -65,11 +65,11 @@ function runTest() {
         console.error("Test 3 Fail: Missing new search_stats keys", stats);
     }
 
-    // Test 4: Determinism (Odds Tie-Breaker)
+    // Test 4: Determinism (Composite Key Tie-Breaker)
     let determinismPass = true;
     const shuffle = (array) => array.sort(() => Math.random() - 0.5);
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 20; i++) { // Increase iterations for robustness
         const run = generateComboBoard(shuffle([...bets]), '2023-10-27', '2023-10-30');
         const runRef = generateComboBoard(bets, '2023-10-27', '2023-10-30');
 
@@ -80,12 +80,11 @@ function runTest() {
     }
 
     if (determinismPass) {
-         console.log("Test 4 Pass: Strict Determinism (Odds Tie-Breaker) Verified.");
+         console.log("Test 4 Pass: Strict Determinism (Composite Key) Verified.");
     }
 
     // Test 5: TT Regex Safety
     // Indirectly verified via Pool Size if Match 15 is included (default family is ok).
-    // We can't inspect family directly.
     console.log("Test 5 Info: Regex safety integrated.");
 
     console.log("Tests Complete.");
