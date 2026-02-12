@@ -262,44 +262,42 @@ function deduplicateBets(bets) {
                                         const ec = String(existing.category || "").trim();
                                         if (bc > ec) best[b.match_id] = b;
                                         else if (bc === ec) {
-                                            // Date ISO (Lexical)
-                                            const bd = String(b.date_iso || "");
-                                            const ed = String(existing.date_iso || "");
+                                            // Date ISO (Lexical, Trimmed)
+                                            const bd = String(b.date_iso || "").trim();
+                                            const ed = String(existing.date_iso || "").trim();
                                             if (bd > ed) best[b.match_id] = b;
                                             else if (bd === ed) {
-                                                // ID (Smart Numeric or Lexical)
-                                                const bidStr = String(b.id || b.bet_id || "");
-                                                const eidStr = String(existing.id || existing.bet_id || "");
+                                                // ID (Smart Numeric or Lexical) - trimmed + safe numeric compare
+                                                const bidStr = String(b.id || b.bet_id || "").trim();
+                                                const eidStr = String(existing.id || existing.bet_id || "").trim();
 
-                                                // Try numeric parse
-                                                const bidNum = Number(bidStr);
-                                                const eidNum = Number(eidStr);
+                                                const bidNum = bidStr !== "" ? Number(bidStr) : NaN;
+                                                const eidNum = eidStr !== "" ? Number(eidStr) : NaN;
+
+                                                const bidIsNum = Number.isFinite(bidNum);
+                                                const eidIsNum = Number.isFinite(eidNum);
 
                                                 let idWin = false;
                                                 let idEqual = false;
 
-                                                if (!isNaN(bidNum) && !isNaN(eidNum)) {
+                                                if (bidIsNum && eidIsNum) {
                                                     if (bidNum > eidNum) idWin = true;
                                                     else if (bidNum === eidNum) idEqual = true;
                                                 } else {
-                                                    // Fallback to lexical
                                                     if (bidStr > eidStr) idWin = true;
                                                     else if (bidStr === eidStr) idEqual = true;
                                                 }
 
-                                                if (idWin) best[b.match_id] = b;
-                                                else if (idEqual) {
+                                                if (idWin) {
+                                                    best[b.match_id] = b;
+                                                } else if (idEqual) {
                                                     // Ultimate Explicit Fingerprint (Airtight)
-                                                    // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
-                                                    // Use Number.isFinite check to prevent crashes on bad data
-                                                    // Trim all strings
                                                     const bSrc = String(b.bookmaker || b.source || "").trim();
                                                     const eSrc = String(existing.bookmaker || existing.source || "").trim();
 
                                                     const bO = Number.isFinite(b.odds) ? b.odds : 0;
                                                     const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
 
-                                                    // Use Trimmed values for fingerprint too
                                                     const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bidStr}|${bSrc}`;
                                                     const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eidStr}|${eSrc}`;
 
