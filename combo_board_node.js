@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strict composite tie-breaker (market|selection|odds) to ensure 100% stability.
+ * - Determinism: Added strictly deterministic tie-breaker chain (Selection > Numeric Odds > Category).
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -230,7 +230,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Composite Key (Strict Determinism)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category (Stable Fallback)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -244,14 +244,20 @@ function deduplicateBets(bets) {
                             const em = String(existing.market || "");
                             if (bm > em) best[b.match_id] = b;
                             else if (bm === em) {
-                                // Final Composite Key for Strict Determinism
+                                // Selection Name (Lexical)
                                 const bs = String(b.selection || b.runner || "");
                                 const es = String(existing.selection || existing.runner || "");
-
-                                const bKey = `${bs}|${b.odds}`;
-                                const eKey = `${es}|${existing.odds}`;
-
-                                if (bKey > eKey) best[b.match_id] = b;
+                                if (bs > es) best[b.match_id] = b;
+                                else if (bs === es) {
+                                    // Odds (Numeric - Higher is preferred)
+                                    if (b.odds > existing.odds) best[b.match_id] = b;
+                                    else if (b.odds === existing.odds) {
+                                        // Final Stable Fallback: Category (Lexical)
+                                        const bc = String(b.category || "");
+                                        const ec = String(existing.category || "");
+                                        if (bc > ec) best[b.match_id] = b;
+                                    }
+                                }
                             }
                         }
                     }
