@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO).
+ * - Determinism: Added strict multi-stage tie-breaker (Market > Selection > Odds > Category > Date > ID > Fingerprint).
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -176,6 +176,7 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
             };
             
             // Mark used (only if strict isolation is enforced, or just for tracking)
+            // Optimization: Skip adding if reuse is allowed.
             if (!allowReuse) {
                 bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
             }
@@ -232,7 +233,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO (Strict Determinism)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO > ID > Fingerprint (Airtight Determinism)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -259,19 +260,23 @@ function deduplicateBets(bets) {
                                         const ec = String(existing.category || "");
                                         if (bc > ec) best[b.match_id] = b;
                                         else if (bc === ec) {
-                                            // Final Fallback: Date ISO (Lexical)
-                                            // Prefer LATER date (latest update?) or just lexicographical.
-                                            // Actually, match_id fallback was useless. date_iso can vary.
-                                            // Or ID if available.
+                                            // Date ISO (Lexical)
                                             const bd = String(b.date_iso || "");
                                             const ed = String(existing.date_iso || "");
                                             if (bd > ed) best[b.match_id] = b;
                                             else if (bd === ed) {
-                                                // Ultimate Fallback: ID (if available, e.g. bet_id or source specific)
-                                                // If IDs are missing, we are stuck with input order, which is fine for TRULY identical objects.
+                                                // ID (Lexical)
                                                 const bid = String(b.id || b.bet_id || "");
                                                 const eid = String(existing.id || existing.bet_id || "");
                                                 if (bid > eid) best[b.match_id] = b;
+                                                else if (bid === eid) {
+                                                    // Ultimate Stable Fingerprint (Airtight)
+                                                    // Include fields that might differ even if above match
+                                                    // e.g. source, bookmaker, or just full stringify
+                                                    const bFp = JSON.stringify({ m: bm, s: bs, o: b.odds, c: bc, d: bd, src: b.bookmaker || b.source || "" });
+                                                    const eFp = JSON.stringify({ m: em, s: es, o: existing.odds, c: ec, d: ed, src: existing.bookmaker || existing.source || "" });
+                                                    if (bFp > eFp) best[b.match_id] = b;
+                                                }
                                             }
                                         }
                                     }
