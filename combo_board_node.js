@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Match ID).
+ * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO).
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -176,9 +176,6 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
             };
             
             // Mark used (only if strict isolation is enforced, or just for tracking)
-            // If allowReuse is true, we technically don't need to populate usedMatches for filtering logic,
-            // but populating it harms nothing unless we re-use the set for something else.
-            // Optimization: Skip adding if reuse is allowed.
             if (!allowReuse) {
                 bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
             }
@@ -235,7 +232,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Match ID (Strict Determinism)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO (Strict Determinism)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -262,9 +259,20 @@ function deduplicateBets(bets) {
                                         const ec = String(existing.category || "");
                                         if (bc > ec) best[b.match_id] = b;
                                         else if (bc === ec) {
-                                            // Final Fallback: Match ID (Numeric/String stable sort) - Ensure absolute determinism
-                                            // Prefer higher ID just to pick one deterministically.
-                                            if (b.match_id > existing.match_id) best[b.match_id] = b;
+                                            // Final Fallback: Date ISO (Lexical)
+                                            // Prefer LATER date (latest update?) or just lexicographical.
+                                            // Actually, match_id fallback was useless. date_iso can vary.
+                                            // Or ID if available.
+                                            const bd = String(b.date_iso || "");
+                                            const ed = String(existing.date_iso || "");
+                                            if (bd > ed) best[b.match_id] = b;
+                                            else if (bd === ed) {
+                                                // Ultimate Fallback: ID (if available, e.g. bet_id or source specific)
+                                                // If IDs are missing, we are stuck with input order, which is fine for TRULY identical objects.
+                                                const bid = String(b.id || b.bet_id || "");
+                                                const eid = String(existing.id || existing.bet_id || "");
+                                                if (bid > eid) best[b.match_id] = b;
+                                            }
                                         }
                                     }
                                 }

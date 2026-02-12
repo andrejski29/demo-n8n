@@ -32,30 +32,16 @@ const bets = [
     { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 2.00, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' },
     { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 10.0, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' }, // Higher odds should win
 
-    // Final Fallback Determinism (Match ID)
-    // Identical bets except Match ID (which we pretend is different for testing logic, but dedup logic groups by match_id)
-    // Wait, dedup groups by match_id. So we can't test "different match_id" fallback because they wouldn't be compared!
-    // The "Match ID" fallback in dedup is only used if we are comparing two candidates for the SAME match_id key.
-    // But two candidates for the SAME match_id key MUST have the same match_id!
-    // So `b.match_id > existing.match_id` will always be false (equal).
-    // Unless... the input data has different `match_id` values but we are grouping them into the same key?
-    // No, `best[b.match_id]`.
-    // So the final fallback `b.match_id > existing.match_id` is actually impossible to trigger if logic is correct?
-    // Actually, `match_id` is the key. So `b.match_id` === `existing.match_id`.
-    // So that fallback is redundant?
-    // YES.
-    // What if we fallback to something else unique? `date_iso`?
-    // Or maybe we just accept `Odds` + `Category` + `Selection` + `Market` is enough?
-    // If EVERYTHING is identical (including Market, Selection, Odds, Category), then they are truly duplicates.
-    // Input order prevailing is acceptable for identical duplicates.
-    // But `match_id` fallback is harmless dead code. I'll leave it or remove it.
-    // Actually, let's change fallback to `date_iso`.
-    // But `date_iso` might be same too.
-    // If truly identical, order doesn't matter.
+    // Final Fallback Determinism (Date ISO)
+    // Identical bets except Date ISO (which we pretend is different for testing logic, but dedup logic groups by match_id)
+    // If Match 101 has two entries with identical stats, selection, odds, market, but DIFFERENT dates.
+    // Logic should pick "later" date (lexicographically greater).
+    { match_id: 101, date_iso: '2023-10-27T10:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' },
+    { match_id: 101, date_iso: '2023-10-27T11:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' } // Later date should win
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 Final Polished)...");
+    console.log("Starting Combo Board Node Tests (v1.3 Final Strict)...");
 
     // Test 0: Input Validation
     const invalidInput = generateComboBoard("Not Array", '2023-10-27', '2023-10-30');
@@ -68,10 +54,11 @@ function runTest() {
     else console.log("Test 1 Pass: Structure OK");
 
     // Test 2: Pool Size Logic
-    if (result.meta.pool_size === 15) {
-        console.log("Test 2 Pass: Pool Size Correct (15)");
+    // 9 original + 4 fallback (11-14) + 1 dedup (Match 100) + 1 dedup (Match 101) + 1 Negative Test (Match 15) = 16 unique matches.
+    if (result.meta.pool_size === 16) {
+        console.log("Test 2 Pass: Pool Size Correct (16)");
     } else {
-        console.error(`Test 2 Fail: Expected pool size 15, got ${result.meta.pool_size}`);
+        console.error(`Test 2 Fail: Expected pool size 16, got ${result.meta.pool_size}`);
     }
 
     // Test 3: Search Diagnostics
@@ -109,6 +96,37 @@ function runTest() {
         console.error("Test 5 Fail: Numeric Comparison failed? 2.0 (String winner) was picked over 10.0 (Numeric winner).");
     } else {
         console.log("Test 5 Pass: Numeric Comparison works (10.0 > 2.0 selected, then rejected by max odds).");
+    }
+
+    // Test 6: Check Date ISO Win (Match 101)
+    // Both 1.50 odds. Later date is 11:00:00.
+    // If later date is picked, it should be in the pool.
+    // Actually both are identical except date.
+    // The "result" has the date of the WINNER.
+    // Let's inspect "Match 101" in the safe combo (Odds 1.50 fits Safe).
+    const safeLegs = result.combos.safe ? result.combos.safe.legs : [];
+    const match101 = safeLegs.find(l => l.match_id === 101);
+
+    if (match101) {
+        if (match101.date_iso.includes('11:00:00')) {
+             console.log("Test 6 Pass: Date ISO Tie-breaker works (Later date selected).");
+        } else {
+             console.error(`Test 6 Fail: Date ISO Tie-breaker failed. Expected 11:00:00, got ${match101.date_iso}`);
+        }
+    } else {
+        // Match 101 might not be in Safe combo if not optimal.
+        // It has P=0.60. Safe requires 0.62.
+        // Ah, P=0.60. Fits Balanced.
+        const match101Bal = balancedLegs.find(l => l.match_id === 101);
+        if (match101Bal) {
+             if (match101Bal.date_iso.includes('11:00:00')) {
+                 console.log("Test 6 Pass: Date ISO Tie-breaker works (Later date selected).");
+             } else {
+                 console.error(`Test 6 Fail: Date ISO Tie-breaker failed. Expected 11:00:00, got ${match101Bal.date_iso}`);
+             }
+        } else {
+            console.warn("Test 6 Warn: Match 101 not in any combo, cannot verify date.");
+        }
     }
 
     console.log("Tests Complete.");
