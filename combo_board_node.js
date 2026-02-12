@@ -5,6 +5,7 @@
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
  * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
+ * - Hygiene: Trimmed strings and smart numeric ID comparison.
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -243,22 +244,22 @@ function deduplicateBets(bets) {
                     else if (b.sort_score === existing.sort_score) {
                         if (b.ev > existing.ev) best[b.match_id] = b;
                         else if (b.ev === existing.ev) {
-                            // Lexical Compare on Market Name
-                            const bm = String(b.market || "");
-                            const em = String(existing.market || "");
+                            // Lexical Compare on Market Name (Trimmed)
+                            const bm = String(b.market || "").trim();
+                            const em = String(existing.market || "").trim();
                             if (bm > em) best[b.match_id] = b;
                             else if (bm === em) {
-                                // Selection Name (Lexical)
-                                const bs = String(b.selection || b.runner || "");
-                                const es = String(existing.selection || existing.runner || "");
+                                // Selection Name (Lexical, Trimmed)
+                                const bs = String(b.selection || b.runner || "").trim();
+                                const es = String(existing.selection || existing.runner || "").trim();
                                 if (bs > es) best[b.match_id] = b;
                                 else if (bs === es) {
                                     // Odds (Numeric - Higher is preferred)
                                     if (b.odds > existing.odds) best[b.match_id] = b;
                                     else if (b.odds === existing.odds) {
-                                        // Category (Lexical)
-                                        const bc = String(b.category || "");
-                                        const ec = String(existing.category || "");
+                                        // Category (Lexical, Trimmed)
+                                        const bc = String(b.category || "").trim();
+                                        const ec = String(existing.category || "").trim();
                                         if (bc > ec) best[b.match_id] = b;
                                         else if (bc === ec) {
                                             // Date ISO (Lexical)
@@ -266,22 +267,41 @@ function deduplicateBets(bets) {
                                             const ed = String(existing.date_iso || "");
                                             if (bd > ed) best[b.match_id] = b;
                                             else if (bd === ed) {
-                                                // ID (Lexical)
-                                                const bid = String(b.id || b.bet_id || "");
-                                                const eid = String(existing.id || existing.bet_id || "");
-                                                if (bid > eid) best[b.match_id] = b;
-                                                else if (bid === eid) {
+                                                // ID (Smart Numeric or Lexical)
+                                                const bidStr = String(b.id || b.bet_id || "");
+                                                const eidStr = String(existing.id || existing.bet_id || "");
+
+                                                // Try numeric parse
+                                                const bidNum = Number(bidStr);
+                                                const eidNum = Number(eidStr);
+
+                                                let idWin = false;
+                                                let idEqual = false;
+
+                                                if (!isNaN(bidNum) && !isNaN(eidNum)) {
+                                                    if (bidNum > eidNum) idWin = true;
+                                                    else if (bidNum === eidNum) idEqual = true;
+                                                } else {
+                                                    // Fallback to lexical
+                                                    if (bidStr > eidStr) idWin = true;
+                                                    else if (bidStr === eidStr) idEqual = true;
+                                                }
+
+                                                if (idWin) best[b.match_id] = b;
+                                                else if (idEqual) {
                                                     // Ultimate Explicit Fingerprint (Airtight)
                                                     // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
-                                                    // Use Number.isFinite check to prevent crashes on bad data (though unlikely due to sanitization)
-                                                    const bSrc = String(b.bookmaker || b.source || "");
-                                                    const eSrc = String(existing.bookmaker || existing.source || "");
+                                                    // Use Number.isFinite check to prevent crashes on bad data
+                                                    // Trim all strings
+                                                    const bSrc = String(b.bookmaker || b.source || "").trim();
+                                                    const eSrc = String(existing.bookmaker || existing.source || "").trim();
 
                                                     const bO = Number.isFinite(b.odds) ? b.odds : 0;
                                                     const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
 
-                                                    const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bid}|${bSrc}`;
-                                                    const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eid}|${eSrc}`;
+                                                    // Use Trimmed values for fingerprint too
+                                                    const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bidStr}|${bSrc}`;
+                                                    const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eidStr}|${eSrc}`;
 
                                                     if (bFp > eFp) best[b.match_id] = b;
                                                 }

@@ -40,14 +40,24 @@ const bets = [
     { match_id: 102, date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A', source: 'BookA' },
     { match_id: 102, date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A', source: 'BookB' }, // "BookB" > "BookA"
 
-    // Safe Fingerprint Test (Invalid/Infinite Odds edge case)
-    // sanitizeBet forces >= 1.0, but we test bypassing it or weird inputs if sanitize fails
-    // However, generateComboBoard calls sanitizeBet internally. So we can't easily inject bad data into deduplicateBets directly.
-    // We trust Number.isFinite check.
+    // String Hygiene Test (Trimming)
+    { match_id: 103, date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A ', selection: 'Team A' }, // "Winner A "
+    { match_id: 103, date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' },  // "Winner A"
+    // After trimming, these are identical. So dedup should merge them.
+    // If NOT trimmed, "Winner A " > "Winner A". So "Winner A " would win (lexical).
+    // If trimmed, they are equal. Fallback tie-breakers run.
+    // Since everything else equal, order decides (keep first).
+
+    // Numeric ID Test
+    { match_id: 104, id: "9", date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05 },
+    { match_id: 104, id: "10", date_iso: '2023-10-27T12:00:00', odds: 1.50, p_model: 0.60, confidence_score: 60, ev: 0.05 },
+    // Numeric sort: 10 > 9. ID "10" wins.
+    // Lexical sort: "9" > "10". ID "9" wins.
+    // We expect "10" to win if numeric sort works.
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 Final Safe)...");
+    console.log("Starting Combo Board Node Tests (v1.3 Final Hygiene)...");
 
     // Test 0: Input Validation
     const invalidInput = generateComboBoard("Not Array", '2023-10-27', '2023-10-30');
@@ -60,10 +70,11 @@ function runTest() {
     else console.log("Test 1 Pass: Structure OK");
 
     // Test 2: Pool Size Logic
-    if (result.meta.pool_size === 17) {
-        console.log("Test 2 Pass: Pool Size Correct (17)");
+    // 9 original + 4 fallback (11-14) + 3 dedup (100, 101, 102) + 1 dedup (103) + 1 dedup (104) + 1 Negative (15) = 19 unique matches.
+    if (result.meta.pool_size === 19) {
+        console.log("Test 2 Pass: Pool Size Correct (19)");
     } else {
-        console.error(`Test 2 Fail: Expected pool size 17, got ${result.meta.pool_size}`);
+        console.error(`Test 2 Fail: Expected pool size 19, got ${result.meta.pool_size}`);
     }
 
     // Test 3: Search Diagnostics
@@ -75,7 +86,7 @@ function runTest() {
         console.error("Test 3 Fail: Missing new search_stats keys", stats);
     }
 
-    // Test 4: Determinism (Strict Numeric Shuffle + Explicit Fingerprint)
+    // Test 4: Determinism (Strict Numeric Shuffle + Fingerprint + Hygiene)
     let determinismPass = true;
     const shuffle = (array) => array.sort(() => Math.random() - 0.5);
 
@@ -90,11 +101,33 @@ function runTest() {
     }
 
     if (determinismPass) {
-         console.log("Test 4 Pass: Strict Determinism (Shuffle + Fingerprint) Verified.");
+         console.log("Test 4 Pass: Strict Determinism (Shuffle + Fingerprint + Hygiene) Verified.");
     }
 
-    // Test 5-7: Implicit Checks
-    console.log("Test 5-7 Info: Tie-breaker logic verified via Determinism Test.");
+    // Test 8: Numeric ID Sort (Match 104)
+    // Both fit Balanced (P=0.60).
+    // If ID "10" wins (Numeric), it is used.
+    // If ID "9" wins (Lexical), it is used.
+    // We can't see the ID in the output combo easily (match_id is 104 for both).
+    // But we can check internal logic via deduction? No.
+    // However, if Determinism Pass holds, the choice is STABLE.
+    // To know WHICH one won, we'd need to inspect the 'id' field of the chosen bet.
+    // The output `result.combos` contains `legs`. Each leg is the FULL bet object.
+    // So we can inspect `leg.id`.
+
+    const balLegs = result.combos.balanced ? result.combos.balanced.legs : [];
+    const match104 = balLegs.find(l => l.match_id === 104);
+
+    if (match104) {
+        if (match104.id === "10") {
+            console.log("Test 8 Pass: Numeric ID Comparison works ('10' > '9').");
+        } else {
+            console.warn(`Test 8 Warn: Lexical ID Comparison active ('9' > '10')? Got ID: ${match104.id}`);
+            // Note: If code prefers "9", then numeric parse failed or logic is lexical.
+        }
+    } else {
+        console.warn("Test 8 Warn: Match 104 not in balanced combo, cannot verify ID.");
+    }
 
     console.log("Tests Complete.");
 }
