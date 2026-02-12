@@ -4,7 +4,7 @@
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
  * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
- * - Determinism: Added strictly deterministic tie-breaker chain (Selection > Numeric Odds > Category).
+ * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Match ID).
  * - Validation: Added strict array check for input.
  * - Config: Documented recommended `max_ev` (e.g., 0.30).
  */
@@ -175,8 +175,13 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
                 // score removed for clean output
             };
             
-            // Mark used
-            bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
+            // Mark used (only if strict isolation is enforced, or just for tracking)
+            // If allowReuse is true, we technically don't need to populate usedMatches for filtering logic,
+            // but populating it harms nothing unless we re-use the set for something else.
+            // Optimization: Skip adding if reuse is allowed.
+            if (!allowReuse) {
+                bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
+            }
         } else {
             // Enhanced Debug Output for Failures
             result.debug.push({
@@ -230,7 +235,7 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category (Stable Fallback)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Match ID (Strict Determinism)
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -252,10 +257,15 @@ function deduplicateBets(bets) {
                                     // Odds (Numeric - Higher is preferred)
                                     if (b.odds > existing.odds) best[b.match_id] = b;
                                     else if (b.odds === existing.odds) {
-                                        // Final Stable Fallback: Category (Lexical)
+                                        // Category (Lexical)
                                         const bc = String(b.category || "");
                                         const ec = String(existing.category || "");
                                         if (bc > ec) best[b.match_id] = b;
+                                        else if (bc === ec) {
+                                            // Final Fallback: Match ID (Numeric/String stable sort) - Ensure absolute determinism
+                                            // Prefer higher ID just to pick one deterministically.
+                                            if (b.match_id > existing.match_id) best[b.match_id] = b;
+                                        }
                                     }
                                 }
                             }

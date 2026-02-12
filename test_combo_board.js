@@ -29,15 +29,33 @@ const bets = [
 
     // Determinism Tie-Breaker Candidates (Same Match ID, Same Stats)
     // Numeric Comparison Test Case
-    // "10.0" vs "2.0". String("10.0") < String("2.0").
-    // If logic is String based, "2.0" wins (if we seek >). But 10.0 is better.
-    // If logic is Numeric based, 10.0 wins (10.0 > 2.0).
     { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 2.00, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' },
-    { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 10.0, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' } // Higher odds should win
+    { match_id: 100, date_iso: '2023-10-27T15:00:00', odds: 10.0, p_model: 0.60, confidence_score: 60, ev: 0.05, market: 'Winner A', selection: 'Team A' }, // Higher odds should win
+
+    // Final Fallback Determinism (Match ID)
+    // Identical bets except Match ID (which we pretend is different for testing logic, but dedup logic groups by match_id)
+    // Wait, dedup groups by match_id. So we can't test "different match_id" fallback because they wouldn't be compared!
+    // The "Match ID" fallback in dedup is only used if we are comparing two candidates for the SAME match_id key.
+    // But two candidates for the SAME match_id key MUST have the same match_id!
+    // So `b.match_id > existing.match_id` will always be false (equal).
+    // Unless... the input data has different `match_id` values but we are grouping them into the same key?
+    // No, `best[b.match_id]`.
+    // So the final fallback `b.match_id > existing.match_id` is actually impossible to trigger if logic is correct?
+    // Actually, `match_id` is the key. So `b.match_id` === `existing.match_id`.
+    // So that fallback is redundant?
+    // YES.
+    // What if we fallback to something else unique? `date_iso`?
+    // Or maybe we just accept `Odds` + `Category` + `Selection` + `Market` is enough?
+    // If EVERYTHING is identical (including Market, Selection, Odds, Category), then they are truly duplicates.
+    // Input order prevailing is acceptable for identical duplicates.
+    // But `match_id` fallback is harmless dead code. I'll leave it or remove it.
+    // Actually, let's change fallback to `date_iso`.
+    // But `date_iso` might be same too.
+    // If truly identical, order doesn't matter.
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 Final Strict)...");
+    console.log("Starting Combo Board Node Tests (v1.3 Final Polished)...");
 
     // Test 0: Input Validation
     const invalidInput = generateComboBoard("Not Array", '2023-10-27', '2023-10-30');
@@ -73,7 +91,6 @@ function runTest() {
         const run = generateComboBoard(shuffle([...bets]), '2023-10-27', '2023-10-30');
         const runRef = generateComboBoard(bets, '2023-10-27', '2023-10-30');
 
-        // Check equality
         if (JSON.stringify(run.combos) !== JSON.stringify(runRef.combos)) {
             determinismPass = false;
             console.error(`Test 4 Fail: Iteration ${i} produced different output.`);
@@ -85,53 +102,13 @@ function runTest() {
     }
 
     // Test 5: Check Numeric Odds Win (Match 100)
-    // We can't see the pool, but we can verify if the chosen bet for Match 100 made it into a combo.
-    // Match 100: P=0.60. Fits 'Balanced' (Min P 0.54) but Odds 10.0 fits 'Booster' (Min Odds 8.0? No, min odds leg 1.70).
-    // Odds 10.0 is very high for a single leg.
-    // Booster Leg Odds Max: 3.20.
-    // So 10.0 will be filtered out by 'Booster' leg filter!
-    // 2.00 will be filtered out by 'Booster' Min P 0.45? Yes.
-    // 2.00 fits 'Safe' (Max 2.10)? P=0.60 < 0.62. No.
-    // 2.00 fits 'Balanced' (Max 2.50)? P=0.60 > 0.54. Yes.
-    // So if 2.00 is chosen, it enters Balanced pool.
-    // If 10.0 is chosen, it enters Balanced pool? 10.0 > 2.50 Max leg odds. No.
-    // So if 10.0 is chosen, Match 100 DISAPPEARS from Balanced!
-    // If 2.00 is chosen, Match 100 APPEARS in Balanced candidates.
-    // Therefore, if our logic prefers 10.0 (Numeric), Match 100 effectively vanishes from usable pool.
-    // If our logic was string ("2.0" > "10.0"?), then 2.0 would be chosen and used.
-
-    // Let's verify which one happened.
-    // If Match 100 is in Balanced combo, then 2.0 was picked (String sort wins or logic flawed).
-    // If Match 100 is NOT in Balanced combo (and pool has space), then 10.0 was picked (Numeric wins).
-
-    // Actually, "2.0" > "10.0". String compare says "2" > "1". So "2.0" is greater.
-    // So String compare would ALSO pick 2.0!
-    // Wait. "10.0" vs "2.0". '1' < '2'. So "10.0" < "2.0".
-    // If logic is `if (b.odds > existing.odds)`, and we want MAX.
-    // "2.0" > "10.0" is true. So String logic picks 2.0.
-    // Numeric logic picks 10.0.
-
-    // So:
-    // String Logic -> Picks 2.0 -> Fits Balanced -> Appears in Combo.
-    // Numeric Logic -> Picks 10.0 -> Fails Max Odds -> Disappears.
-
-    // Let's check Balanced Combo legs.
     const balancedLegs = result.combos.balanced ? result.combos.balanced.legs : [];
     const hasMatch100 = balancedLegs.some(l => l.match_id === 100);
 
     if (hasMatch100) {
-        console.warn("Test 5 Info: Match 100 found in Balanced. This means Odds 2.0 was selected.");
-        console.warn("   -> Since 2.0 < 10.0 numerically, this implies logic might be wrong OR 10.0 was invalid?");
-        console.warn("   -> Wait, deduplicate happens BEFORE bucket filtering.");
-        console.warn("   -> So dedup picks best. If dedup picks 10.0, it is passed to buckets.");
-        console.warn("   -> Balanced bucket sees 10.0, rejects it (Max 2.50). Match 100 dead.");
-        console.warn("   -> If dedup picks 2.0, Balanced sees 2.0, accepts it. Match 100 alive.");
-        console.warn("   -> RESULT: Match 100 is present.");
         console.error("Test 5 Fail: Numeric Comparison failed? 2.0 (String winner) was picked over 10.0 (Numeric winner).");
     } else {
-        console.log("Test 5 Pass: Match 100 NOT found in Balanced.");
-        console.log("   -> Implies 10.0 (Numeric winner) was picked by Dedup, then rejected by Bucket Filters.");
-        console.log("   -> Numeric Comparison works (10.0 > 2.0).");
+        console.log("Test 5 Pass: Numeric Comparison works (10.0 > 2.0 selected, then rejected by max odds).");
     }
 
     console.log("Tests Complete.");
