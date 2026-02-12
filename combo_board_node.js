@@ -234,6 +234,7 @@ function deduplicateBets(bets) {
             best[b.match_id] = b;
         } else {
             // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO > ID > Fingerprint (Strict Determinism)
+            // NOTE: For String comparisons, "Lexicographically Larger" wins (e.g. "B" > "A").
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -272,11 +273,15 @@ function deduplicateBets(bets) {
                                                 else if (bid === eid) {
                                                     // Ultimate Explicit Fingerprint (Airtight)
                                                     // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
+                                                    // Use Number.isFinite check to prevent crashes on bad data (though unlikely due to sanitization)
                                                     const bSrc = String(b.bookmaker || b.source || "");
                                                     const eSrc = String(existing.bookmaker || existing.source || "");
 
-                                                    const bFp = `${bm}|${bs}|${b.odds.toFixed(3)}|${bc}|${bd}|${bid}|${bSrc}`;
-                                                    const eFp = `${em}|${es}|${existing.odds.toFixed(3)}|${ec}|${ed}|${eid}|${eSrc}`;
+                                                    const bO = Number.isFinite(b.odds) ? b.odds : 0;
+                                                    const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
+
+                                                    const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bid}|${bSrc}`;
+                                                    const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eid}|${eSrc}`;
 
                                                     if (bFp > eFp) best[b.match_id] = b;
                                                 }
