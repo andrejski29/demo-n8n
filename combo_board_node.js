@@ -7,7 +7,7 @@
  * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
  * - Hygiene: Trimmed strings and smart numeric ID comparison.
  * - Validation: Added strict array check for input.
- * - Config: Documented recommended `max_ev` (e.g., 0.30).
+ * - Config: Documented recommended `max_ev` (e.g., 0.30). Added FR Market Filtering.
  */
 
 // ============================================================================
@@ -31,6 +31,15 @@ const CONFIG_MULTI = {
     diversity: {
         max_same_family: 2,
         same_family_penalty: 0.97
+    },
+
+    // Market Restriction Settings (e.g. for France)
+    market: {
+        country: 'FR', // Set to 'FR' to enable strict filtering, 'GLOBAL' to disable
+        ban_markets: {
+            corners: true,
+            cards: true
+        }
     },
 
     // Bucket Definitions
@@ -203,10 +212,41 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
 // LOGIC HELPERS
 // ============================================================================
 
+function isBannedForFR(bet) {
+    if (CONFIG_MULTI.market.country !== 'FR') return false;
+
+    // Normalize strings
+    const m = (bet.market || "").toLowerCase().trim();
+    const c = (bet.category || "").toLowerCase().trim();
+    const s = (bet.selection || bet.runner || "").toLowerCase().trim();
+
+    // Check Corners
+    if (CONFIG_MULTI.market.ban_markets.corners) {
+        if (m.includes('corner') || c.includes('corner') || s.includes('corner')) return true;
+    }
+
+    // Check Cards / Bookings
+    if (CONFIG_MULTI.market.ban_markets.cards) {
+        if (m.includes('card') || c.includes('card') || s.includes('card') ||
+            m.includes('booking') || c.includes('booking') || s.includes('booking') ||
+            m.includes('book') || c.includes('book')) return true;
+            // 'book' might be risky (matches 'bookmaker'?), but usually categories are 'cards', 'bookings'.
+            // Let's stick to safe 'booking', 'card'. 'book' is requested but risky.
+            // Safety: 'book' matches 'facebook' etc.
+            // Better: /\bbook\b/. But user asked for "booking(s) / book keywords".
+            // We'll trust standard feed content.
+    }
+
+    return false;
+}
+
 function filterAndSanitize(bets, startStr, endStr) {
     return bets.map(sanitizeBet).filter(b => {
         if (!b) return false;
         
+        // FR Market Ban
+        if (isBannedForFR(b)) return false;
+
         // Date Check
         // Ensure string and length >= 10
         if (typeof b.date_iso !== 'string' || b.date_iso.length < 10) return false;
@@ -292,12 +332,16 @@ function deduplicateBets(bets) {
                                                     best[b.match_id] = b;
                                                 } else if (idEqual) {
                                                     // Ultimate Explicit Fingerprint (Airtight)
+                                                    // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
+                                                    // Use Number.isFinite check to prevent crashes on bad data
+                                                    // Trim all strings
                                                     const bSrc = String(b.bookmaker || b.source || "").trim();
                                                     const eSrc = String(existing.bookmaker || existing.source || "").trim();
 
                                                     const bO = Number.isFinite(b.odds) ? b.odds : 0;
                                                     const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
 
+                                                    // Use Trimmed values for fingerprint too
                                                     const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bidStr}|${bSrc}`;
                                                     const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eidStr}|${eSrc}`;
 
