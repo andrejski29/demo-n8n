@@ -7,7 +7,7 @@
  * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
  * - Hygiene: Trimmed strings and smart numeric ID comparison.
  * - Validation: Added strict array check for input.
- * - Config: Documented recommended `max_ev` (e.g., 0.30). Added FR Market Filtering.
+ * - Config: Documented recommended `max_ev` (e.g., 0.30). Added FR Market Filtering (Smart).
  */
 
 // ============================================================================
@@ -215,26 +215,33 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
 function isBannedForFR(bet) {
     if (CONFIG_MULTI.market.country !== 'FR') return false;
 
-    // Normalize strings
+    // 1. Check Derived Family (Most Reliable)
+    if (bet.market_family) {
+        if (CONFIG_MULTI.market.ban_markets.corners && bet.market_family === 'corners_ou') return true;
+        if (CONFIG_MULTI.market.ban_markets.cards && bet.market_family === 'cards_total') return true;
+    }
+
+    // 2. Fallback Text Check (If family ambiguous or missing)
+    // Use Safe Regex (Boundaries) to avoid "bookmaker" false positives
     const m = (bet.market || "").toLowerCase().trim();
     const c = (bet.category || "").toLowerCase().trim();
     const s = (bet.selection || bet.runner || "").toLowerCase().trim();
 
-    // Check Corners
+    const textToCheck = [m, c, s];
+
+    const RE_CORNERS = /\bcorner(s)?\b/i;
+    // Matches "card", "cards", "booking", "bookings", "book" (word boundary only)
+    // "book" is risky but requested; \b ensures "bookmaker" (no space) is safe.
+    // "player to be booked" -> "booked" -> matches "book"? No. "booked" matches.
+    // Let's match: card(s), booking(s), book, booked
+    const RE_CARDS = /\b(card|booking|book|booked)(s)?\b/i;
+
     if (CONFIG_MULTI.market.ban_markets.corners) {
-        if (m.includes('corner') || c.includes('corner') || s.includes('corner')) return true;
+        if (textToCheck.some(t => RE_CORNERS.test(t))) return true;
     }
 
-    // Check Cards / Bookings
     if (CONFIG_MULTI.market.ban_markets.cards) {
-        if (m.includes('card') || c.includes('card') || s.includes('card') ||
-            m.includes('booking') || c.includes('booking') || s.includes('booking') ||
-            m.includes('book') || c.includes('book')) return true;
-            // 'book' might be risky (matches 'bookmaker'?), but usually categories are 'cards', 'bookings'.
-            // Let's stick to safe 'booking', 'card'. 'book' is requested but risky.
-            // Safety: 'book' matches 'facebook' etc.
-            // Better: /\bbook\b/. But user asked for "booking(s) / book keywords".
-            // We'll trust standard feed content.
+        if (textToCheck.some(t => RE_CARDS.test(t))) return true;
     }
 
     return false;
@@ -375,6 +382,7 @@ function sanitizeBet(bet) {
     clean.ev = parseFloat(bet.ev) || 0;
     
     // Market Family Fallback
+    // Ensure family is set before downstream checks
     if (!clean.market_family || clean.market_family === 'unknown') {
         clean.market_family = deriveMarketFamily(clean);
     }
