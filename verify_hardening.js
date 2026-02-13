@@ -12,10 +12,10 @@ const items = [
             "seasonMatchesPlayed_overall": 10,
             "seasonMatchesPlayed_home": 5,
             "seasonMatchesPlayed_away": 5,
-            
+
             // EDGE CASE: No "recorded" fields (should fallback to matches played)
-            "shots_recorded_matches_num_overall": null, 
-            
+            "shots_recorded_matches_num_overall": null,
+
             // EDGE CASE: Conversion rate as percent (15 instead of 0.15)
             "shot_conversion_rate_overall": 15,
             "shots_per_goals_scored_overall": 6.66,
@@ -23,7 +23,7 @@ const items = [
 
             // EDGE CASE: Missing "cards_for" but has "cardsTotal" (fallback logic)
             "cardsTotal_overall": 20,
-            
+
             "seasonOver05Percentage_overall": 87,
             "additional_info": {
               "half_with_most_corners_is_2h_percentage_overall": 56,

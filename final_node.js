@@ -894,10 +894,10 @@ const extractTeam = (x) => {
   if (!x) return null;
   // Handle array wrapper (common in n8n for 'all items')
   if (Array.isArray(x)) x = x[0];
-  
+
   // Handle API response wrapper: { data: [ { ... } ] }
   if (x.data && Array.isArray(x.data)) return x.data[0];
-  
+
   // Handle n8n item wrapper: { json: { ... } }
   if (x.json) {
       if (x.json.data && Array.isArray(x.json.data)) return x.json.data[0];

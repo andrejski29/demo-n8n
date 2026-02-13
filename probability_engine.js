@@ -62,7 +62,7 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
   const markets = {
     [`${prefix}_1x2`]: { home: 0, draw: 0, away: 0 },
     [`${prefix}_btts`]: { yes: 0, no: 0 },
-    [`${prefix}_goals`]: {}, 
+    [`${prefix}_goals`]: {},
     [`${prefix}_clean_sheet`]: { home: 0, away: 0 },
     [`${prefix}_win_to_nil`]: { home: 0, away: 0 },
     [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
@@ -113,7 +113,7 @@ function deriveCornerMarkets(matrix) {
         corners_1x2: { home: 0, draw: 0, away: 0 },
         corners_ou: {}
     };
-    
+
     const lines = [7.5, 8.5, 9.5, 10.5, 11.5];
     lines.forEach(L => markets.corners_ou[L] = { over: 0, under: 0 });
 
@@ -122,7 +122,7 @@ function deriveCornerMarkets(matrix) {
     for (let h = 0; h <= maxCounts; h++) {
         for (let a = 0; a <= maxCounts; a++) {
             const p = matrix[h][a];
-            
+
             if (h > a) markets.corners_1x2.home += p;
             else if (a > h) markets.corners_1x2.away += p;
             else markets.corners_1x2.draw += p;
@@ -169,7 +169,7 @@ function estimateLambdas(matchRecord) {
   }
 
   const sigXG = matchRecord.signals?.xg;
-  
+
   if (sigXG && sigXG.home > 0.1 && sigXG.away > 0.1) {
       lambdaHome = sigXG.home;
       lambdaAway = sigXG.away;
@@ -187,7 +187,7 @@ function estimateLambdas(matchRecord) {
       lambdaAway = Math.max(0.5, ctxPPG_A * 0.8);
       source = "context_ppg_heuristic";
   } else {
-      lambdaHome = 1.35; 
+      lambdaHome = 1.35;
       lambdaAway = 1.10;
   }
 
@@ -223,7 +223,7 @@ function calculateKelly(p, odds, fraction = 0.25) {
 }
 
 function calculateConfidenceScore(pick, meta) {
-    let score = 50; 
+    let score = 50;
 
     if (meta.source === 'xg_signal') score += 20;
     else if (meta.source === 'context_xg') score += 15;
@@ -233,7 +233,7 @@ function calculateConfidenceScore(pick, meta) {
     if (pick.devig_applied) score += 5;
 
     if (pick.timeframe === 'ft') score += 0;
-    else score -= 5; 
+    else score -= 5;
 
     if (pick.edge > 0.05) score += 5;
     if (pick.ev > 0.10) score += 5;
@@ -342,7 +342,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
         const offered = resolveOdds(odds, oddKey, legacyKey);
 
         if (!offered) continue;
-        
+
         if (offered.odds < minOdds || offered.odds > maxOdds) continue;
 
         const pModel = modelProbs[modelSel];
@@ -358,8 +358,8 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 market: marketDisplay,
                 selection: modelSel,
                 category: meta.category,
-                market_family: meta.family, 
-                timeframe: meta.timeframe, 
+                market_family: meta.family,
+                timeframe: meta.timeframe,
                 line: meta.line,
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
@@ -472,13 +472,13 @@ function rankAndFilterPicks(picks, meta, config) {
   const scored = picks.map(p => {
     const confScore = calculateConfidenceScore(p, meta);
     const tier = getConfidenceTier(confScore);
-    
+
     // Sort Score (V12 Configurable)
     const sortScore = (p.ev * 100) * wEV + (confScore * wConf);
 
-    return { 
-        ...p, 
-        confidence_score: confScore, 
+    return {
+        ...p,
+        confidence_score: confScore,
         confidence_tier: tier,
         sort_score: Number(sortScore.toFixed(2))
     };
@@ -495,9 +495,9 @@ function rankAndFilterPicks(picks, meta, config) {
       } else {
           others.push(p);
       }
-      if (topPicks.length >= 5) break; 
+      if (topPicks.length >= 5) break;
   }
-  
+
   if (topPicks.length < 5) {
       for (const p of others) {
           if (topPicks.length >= 5) break;
@@ -524,7 +524,7 @@ function runSanityChecks(markets, probs, warnings) {
 
 function runEngine(inputs, config = {}) {
   const match = inputs.match || inputs;
-  
+
   const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source, warnings } = estimateLambdas(match);
 
   const split1H = config.split_1h || 0.45;
@@ -552,10 +552,10 @@ function runEngine(inputs, config = {}) {
     match_id: match.match_id,
     overview: {
       teams: match.teams,
-      lambdas: { 
+      lambdas: {
           goals: { home: Number(lambdaHome.toFixed(2)), away: Number(lambdaAway.toFixed(2)) },
           corners: { home: Number(cornerLambdaHome.toFixed(2)), away: Number(cornerLambdaAway.toFixed(2)) },
-          source 
+          source
       },
       probs: {
         home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),

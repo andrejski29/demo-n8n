@@ -32,7 +32,7 @@ const items = [
             shotsTotal_overall: 104,
             shot_conversion_rate_overall: 0.07, // Already scaled
             // Missing cards_for, checking fallback? (Not needed if logic is robust, but good to know)
-             cardsTotal_overall: 28 
+             cardsTotal_overall: 28
           },
           additional_info: {
              formRun_overall: "lwddddldwl"
@@ -63,14 +63,14 @@ const computeTeamFeatures = (teamObj) => {
   const stats = teamObj?.stats || {};
   const add = stats?.additional_info || {};
   const S = { ...stats, ...add };
-  
+
   const mpO = num(S.seasonMatchesPlayed_overall);
   const features = {};
-  
+
   features.mp_overall = mpO;
   features.goals_scored_pm_overall = round(safeDiv(num(S.seasonGoals_overall), mpO), 4);
   features.shots_pm_overall = round(safeDiv(num(S.shotsTotal_overall), mpO), 4);
-  
+
   let rawConv = num(S.shot_conversion_rate_overall);
   if (isNum(rawConv) && rawConv > 1) rawConv = rawConv / 100;
   features.shot_conversion_rate_overall = round(clamp01(rawConv), 6);

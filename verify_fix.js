@@ -89,9 +89,9 @@ const addPctProbs = (out, srcObj, mappings, needFn) => {
 const coverageBlock = (stats, add, mpO, mpH, mpA) => {
   const cov = {};
   const cornersRecO = num(stats?.cornersRecorded_matches_overall);
-  
+
   cov.corners_recorded = { overall: cornersRecO };
-  
+
   // Explicit Coverage Percentages
   cov.coverage_pct = {
     corners_overall: round(safeDiv(cornersRecO, mpO) * 100, 1),
