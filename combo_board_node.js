@@ -3,7 +3,7 @@
  * 
  * Changelog v1.3 Final:
  * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
- * - Market Family: Improved regex safety for 'Team Totals' (\btt\b).
+ * - Market Family: Improved regex safety for 'Team Totals' (\btt\b). Hardened Corners/Cards detection.
  * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
  * - Hygiene: Trimmed strings and smart numeric ID comparison.
  * - Validation: Added strict array check for input.
@@ -222,7 +222,6 @@ function isBannedForFR(bet) {
     }
 
     // 2. Fallback Text Check (If family ambiguous or missing)
-    // Use Safe Regex (Boundaries) to avoid "bookmaker" false positives
     const m = (bet.market || "").toLowerCase().trim();
     const c = (bet.category || "").toLowerCase().trim();
     const s = (bet.selection || bet.runner || "").toLowerCase().trim();
@@ -230,11 +229,9 @@ function isBannedForFR(bet) {
     const textToCheck = [m, c, s];
 
     const RE_CORNERS = /\bcorner(s)?\b/i;
-    // Matches "card", "cards", "booking", "bookings", "book" (word boundary only)
-    // "book" is risky but requested; \b ensures "bookmaker" (no space) is safe.
-    // "player to be booked" -> "booked" -> matches "book"? No. "booked" matches.
-    // Let's match: card(s), booking(s), book, booked
-    const RE_CARDS = /\b(card|booking|book|booked)(s)?\b/i;
+    // Matches "card", "cards", "booking", "bookings", "booked"
+    // "book" is removed to ensure "bookmaker" false positives are impossible even if regex boundary fails
+    const RE_CARDS = /\b(card|cards|booking|bookings|booked)\b/i;
 
     if (CONFIG_MULTI.market.ban_markets.corners) {
         if (textToCheck.some(t => RE_CORNERS.test(t))) return true;
@@ -339,16 +336,12 @@ function deduplicateBets(bets) {
                                                     best[b.match_id] = b;
                                                 } else if (idEqual) {
                                                     // Ultimate Explicit Fingerprint (Airtight)
-                                                    // Normalize numeric odds to 3 decimals to avoid "1.9" vs "1.90" string issues
-                                                    // Use Number.isFinite check to prevent crashes on bad data
-                                                    // Trim all strings
                                                     const bSrc = String(b.bookmaker || b.source || "").trim();
                                                     const eSrc = String(existing.bookmaker || existing.source || "").trim();
 
                                                     const bO = Number.isFinite(b.odds) ? b.odds : 0;
                                                     const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
 
-                                                    // Use Trimmed values for fingerprint too
                                                     const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bidStr}|${bSrc}`;
                                                     const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eidStr}|${eSrc}`;
 
@@ -394,9 +387,14 @@ function deriveMarketFamily(bet) {
     const m = (bet.market || "").toLowerCase();
     const c = (bet.category || "").toLowerCase();
 
+    // Safe Regexes for Family Classification
+    const RE_CORNERS = /\bcorner(s)?\b/i;
+    const RE_CARDS = /\b(card|cards|booking|bookings|booked)\b/i; // No 'book' alone
+
     // 1. Explicit Family Mappings (Priority)
-    if (m.includes('corner') || c.includes('corner')) return 'corners_ou';
-    if (m.includes('card') || c.includes('card') || c.includes('book')) return 'cards_total';
+    if (RE_CORNERS.test(m) || RE_CORNERS.test(c)) return 'corners_ou';
+    if (RE_CARDS.test(m) || RE_CARDS.test(c)) return 'cards_total';
+
     if (m.includes('btts') || m.includes('both teams')) return 'goals_btts';
     if (m.includes('clean sheet')) return 'defense_cs';
     

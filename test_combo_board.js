@@ -13,7 +13,11 @@ const bets = [
     { match_id: 20, date_iso: '2023-10-27T18:00:00', odds: 1.90, p_model: 0.60, confidence_score: 70, ev: 0.05, market: 'Player To Be Booked', category: 'bookings' }, // "booked" keyword
 
     // False Positive Check (Should NOT be banned)
-    { match_id: 21, date_iso: '2023-10-27T19:00:00', odds: 1.80, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'Match Winner', selection: 'Bookmaker Special' }, // Contains "bookmaker" -> "book" substring but not word boundary
+    // "Bookmaker Special" contains "book", but not as a word "card/booking/booked".
+    // Wait, regex `/\b(card|booking|booked)(s)?\b/i`.
+    // "Bookmaker" doesn't match `book`. "book" was removed from regex.
+    // So this should pass.
+    { match_id: 21, date_iso: '2023-10-27T19:00:00', odds: 1.80, p_model: 0.65, confidence_score: 70, ev: 0.05, market: 'Match Winner', selection: 'Bookmaker Special' },
 
     // Balanced Candidates
     { match_id: 4, date_iso: '2023-10-28T15:00:00', odds: 1.80, p_model: 0.60, confidence_score: 70, ev: 0.08, market_family: 'result_1x2', market: '1x2' },
@@ -30,15 +34,15 @@ const bets = [
 ];
 
 function runTest() {
-    console.log("Starting Combo Board Node Tests (v1.3 FR Smart Filtering)...");
+    console.log("Starting Combo Board Node Tests (v1.3 FR Hardened Filtering)...");
 
     // Enable FR Mode
     CONFIG_MULTI.market.country = 'FR';
 
     // Test 1: FR Market Filtering & False Positive Check
-    // Valid for FR: 1, 2, 4, 5, 7, 8, 9, 100 (1 item), 21 (False Positive).
-    // Count: 9.
-    // Banned: 3, 6, 20.
+    // Valid for FR: 1, 2, 4, 5, 7, 8, 9, 100 (1 item), 21 (Bookmaker Special).
+    // Banned: 3 (corner), 6 (card), 20 (booked).
+    // Total Valid: 9.
 
     const resultFR = generateComboBoard(bets, '2023-10-27', '2023-10-30');
 
@@ -46,13 +50,14 @@ function runTest() {
         console.log("Test 1 Pass: FR Filtering Correct (Pool Size 9).");
     } else {
         console.error(`Test 1 Fail: Expected 9, got ${resultFR.meta.pool_size}`);
-        // If got 8, Match 21 ("Bookmaker Special") was wrongly banned.
+        // If 8, "Bookmaker Special" (21) likely banned.
+        // If 10+, "Player To Be Booked" (20) missed.
     }
 
     // Test 2: Global Mode (Disable FR)
     CONFIG_MULTI.market.country = 'GLOBAL';
     const resultGlobal = generateComboBoard(bets, '2023-10-27', '2023-10-30');
-    // Expected: 9 + 3 (banned) = 12 unique matches.
+    // Expected: 9 + 3 (banned) = 12.
     if (resultGlobal.meta.pool_size === 12) {
         console.log("Test 2 Pass: Global Mode Correct (Pool Size 12).");
     } else {
