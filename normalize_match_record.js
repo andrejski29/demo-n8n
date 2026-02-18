@@ -32,7 +32,8 @@ function initQA(inputType) {
         markets_merged: [],
         markets_from_flat_only: [],
         markets_from_comparison_only: [],
-        markets_skipped_invalid: 0
+        markets_skipped_invalid: 0,
+        provenance: { imputed_fields: [] } // Init empty provenance
     };
 }
 
@@ -56,8 +57,14 @@ if (isAlreadyNormalized) {
     qa.warnings.push("input_already_normalized");
 
     // Preserve existing QA info if present
-    if (raw.qa && raw.qa.warnings) {
-        qa.warnings.push(...raw.qa.warnings);
+    if (raw.qa) {
+        if (raw.qa.warnings) {
+            qa.warnings.push(...raw.qa.warnings);
+        }
+        // Preserve existing provenance
+        if (raw.qa.provenance && Array.isArray(raw.qa.provenance.imputed_fields)) {
+            qa.provenance.imputed_fields.push(...raw.qa.provenance.imputed_fields);
+        }
     }
 
     // --- SCHEMA MIGRATION LOGIC ---
@@ -79,20 +86,17 @@ if (isAlreadyNormalized) {
 
     // 3. Context: Merge Signals if missing (With Provenance Tracking)
     if (raw.signals && raw.context) {
-        // Initialize Provenance Block
-        if (!raw.qa.provenance) raw.qa.provenance = { imputed_fields: [] };
-
         if (raw.signals.ppg && raw.context.home_ppg === undefined) {
             raw.context.home_ppg = raw.signals.ppg.home;
             raw.context.away_ppg = raw.signals.ppg.away;
-            raw.qa.provenance.imputed_fields.push('home_ppg', 'away_ppg');
+            qa.provenance.imputed_fields.push('home_ppg', 'away_ppg'); // Push to NEW qa object
             migrated = true;
         }
         if (raw.signals.xg && raw.context.team_a_xg_prematch === undefined) {
             raw.context.team_a_xg_prematch = raw.signals.xg.home;
             raw.context.team_b_xg_prematch = raw.signals.xg.away;
             raw.context.total_xg_prematch = raw.signals.xg.total;
-            raw.qa.provenance.imputed_fields.push('team_a_xg_prematch', 'team_b_xg_prematch');
+            qa.provenance.imputed_fields.push('team_a_xg_prematch', 'team_b_xg_prematch'); // Push to NEW qa object
             migrated = true;
         }
     }
@@ -153,7 +157,7 @@ if (isAlreadyNormalized) {
 
     if (migrated) qa.warnings.push("schema_migrated_v5.2");
 
-    // Assign new QA block
+    // Assign new QA block (which now safely contains provenance)
     raw.qa = qa;
 
     return [{ json: raw }];
