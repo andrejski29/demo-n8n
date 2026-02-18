@@ -189,6 +189,7 @@ function estimateLambdas(matchRecord) {
   } else {
       lambdaHome = 1.35;
       lambdaAway = 1.10;
+      source = "hard_fallback_1.35_1.10";
   }
 
   const hFor = getStat(matchRecord, "team_stats.home.season_stats.features.corners_for_pm_overall") || 4.5;
@@ -375,6 +376,9 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 vector_complete: hasFullVector,
                 missing_legs: missingLegs,
                 margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
+                // V13 Backtest Logging
+                lambda_source: meta.source, // Propagated from estimateLambdas
+                alpha_score: 0 // Placeholder, calculated in Selector
             });
         }
     }
@@ -546,6 +550,9 @@ function runEngine(inputs, config = {}) {
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
+  // Inject Source into Picks for transparency
+  rawPicks.forEach(p => p.lambda_source = source);
+
   const ranked = rankAndFilterPicks(rawPicks, { source, warnings }, config);
 
   return {

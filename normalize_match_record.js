@@ -77,17 +77,22 @@ if (isAlreadyNormalized) {
         migrated = true;
     }
 
-    // 3. Context: Merge Signals if missing
+    // 3. Context: Merge Signals if missing (With Provenance Tracking)
     if (raw.signals && raw.context) {
+        // Initialize Provenance Block
+        if (!raw.qa.provenance) raw.qa.provenance = { imputed_fields: [] };
+
         if (raw.signals.ppg && raw.context.home_ppg === undefined) {
             raw.context.home_ppg = raw.signals.ppg.home;
             raw.context.away_ppg = raw.signals.ppg.away;
+            raw.qa.provenance.imputed_fields.push('home_ppg', 'away_ppg');
             migrated = true;
         }
         if (raw.signals.xg && raw.context.team_a_xg_prematch === undefined) {
             raw.context.team_a_xg_prematch = raw.signals.xg.home;
             raw.context.team_b_xg_prematch = raw.signals.xg.away;
             raw.context.total_xg_prematch = raw.signals.xg.total;
+            raw.qa.provenance.imputed_fields.push('team_a_xg_prematch', 'team_b_xg_prematch');
             migrated = true;
         }
     }
@@ -599,7 +604,11 @@ const outputItem = {
     team_a_xg_prematch: signals.xg.home,
     team_b_xg_prematch: signals.xg.away,
     total_xg_prematch: signals.xg.total,
-    ...signals.potentials
+    ...signals.potentials,
+    _meta: {
+        lambda_source_ppg: signals.ppg.home ? 'signal_ppg' : 'missing',
+        lambda_source_xg: signals.xg.home ? 'signal_xg' : 'missing'
+    }
   },
   signals: signals,
   odds: {
