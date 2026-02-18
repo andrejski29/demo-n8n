@@ -173,7 +173,7 @@ function estimateLambdas(matchRecord) {
   if (sigXG && sigXG.home > 0.1 && sigXG.away > 0.1) {
       lambdaHome = sigXG.home;
       lambdaAway = sigXG.away;
-      source = "xg_signal";
+      source = "signal_xg";
   } else if (ctxXG_A > 0.1) {
       lambdaHome = ctxXG_A;
       lambdaAway = ctxXG_B;
@@ -181,7 +181,7 @@ function estimateLambdas(matchRecord) {
   } else if (matchRecord.signals?.ppg?.home > 0) {
       lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
       lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8);
-      source = "ppg_signal_heuristic";
+      source = "signal_ppg_heuristic";
   } else if (ctxPPG_H > 0) {
       lambdaHome = Math.max(0.5, ctxPPG_H * 0.8);
       lambdaAway = Math.max(0.5, ctxPPG_A * 0.8);
@@ -226,7 +226,7 @@ function calculateKelly(p, odds, fraction = 0.25) {
 function calculateConfidenceScore(pick, meta) {
     let score = 50;
 
-    if (meta.source === 'xg_signal') score += 20;
+    if (meta.source === 'signal_xg') score += 20;
     else if (meta.source === 'context_xg') score += 15;
     else if (meta.source.includes('ppg')) score += 5;
     else if (meta.source.includes('fallback')) score -= 15;

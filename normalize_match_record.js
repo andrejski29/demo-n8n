@@ -157,6 +157,9 @@ if (isAlreadyNormalized) {
 
     if (migrated) qa.warnings.push("schema_migrated_v5.2");
 
+    // Deduplicate provenance fields
+    qa.provenance.imputed_fields = [...new Set(qa.provenance.imputed_fields)];
+
     // Assign new QA block (which now safely contains provenance)
     raw.qa = qa;
 
