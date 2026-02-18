@@ -472,6 +472,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
 function rankAndFilterPicks(picks, meta, config) {
   const wEV = config.rank_w_ev !== undefined ? config.rank_w_ev : 0.6;
   const wConf = config.rank_w_conf !== undefined ? config.rank_w_conf : 0.4;
+  const wProb = config.rank_w_prob !== undefined ? config.rank_w_prob : 1.0; // V13 Alpha Weight
 
   const scored = picks.map(p => {
     const confScore = calculateConfidenceScore(p, meta);
@@ -480,11 +481,15 @@ function rankAndFilterPicks(picks, meta, config) {
     // Sort Score (V12 Configurable)
     const sortScore = (p.ev * 100) * wEV + (confScore * wConf);
 
+    // Alpha Score (V13 Fix: Compute if not present)
+    const alphaScore = (p.ev * 100 * wEV) + (p.p_model * 100 * wProb) + (confScore * wConf);
+
     return {
         ...p,
         confidence_score: confScore,
         confidence_tier: tier,
-        sort_score: Number(sortScore.toFixed(2))
+        sort_score: Number(sortScore.toFixed(2)),
+        alpha_score: Number(alphaScore.toFixed(2))
     };
   }).sort((a, b) => b.sort_score - a.sort_score);
 
