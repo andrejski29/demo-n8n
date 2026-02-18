@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V12 - Prod Safety & Audited)
+// n8n Node: Probability Engine & EV Scanner (V13.1 - Pro Ranking & Portfolio)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -27,7 +27,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
   const matrix = [];
   let totalProb = 0;
 
-  // Precompute PMFs (V12 Optimization)
+  // Precompute PMFs
   const distHome = [];
   const distAway = [];
   for (let k = 0; k <= maxGoals; k++) {
@@ -46,7 +46,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
     matrix.push(row);
   }
 
-  // Renormalize (V12 Safety: Check epsilon drift)
+  // Renormalize
   if (Math.abs(totalProb - 1.0) > 1e-9) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -369,16 +369,14 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 ev: Number(ev.toFixed(4)),
                 kelly: Number(kelly.toFixed(4)),
                 book: offered.book,
-                // V12 Audit
                 devig_applied: devigApplied,
                 p_market_source: devigApplied ? "fair_devig" : "implied_raw",
                 devig_skip_reason: devigSkipReason,
                 vector_complete: hasFullVector,
                 missing_legs: missingLegs,
                 margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
-                // V13 Backtest Logging
-                lambda_source: meta.source, // Propagated from estimateLambdas
-                alpha_score: 0 // Placeholder, calculated in Selector
+                lambda_source: meta.source,
+                alpha_score: 0
             });
         }
     }
@@ -467,54 +465,140 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking & Portfolio ---
+// --- 6. Ranking & Portfolio (V13.1 Pro Selection) ---
 
-function rankAndFilterPicks(picks, meta, config) {
-  const wEV = config.rank_w_ev !== undefined ? config.rank_w_ev : 0.6;
-  const wConf = config.rank_w_conf !== undefined ? config.rank_w_conf : 0.4;
-  const wProb = config.rank_w_prob !== undefined ? config.rank_w_prob : 1.0; // V13 Alpha Weight
+function calculateFinalScore(pick, meta, config) {
+    const wEV = config.rank_w_ev || 0.6;
+    const wProb = config.rank_w_prob || 1.0;
+    const wConf = config.rank_w_conf || 0.4;
+    const evCap = config.rank_ev_cap || 0.75;
 
-  const scored = picks.map(p => {
-    const confScore = calculateConfidenceScore(p, meta);
-    const tier = getConfidenceTier(confScore);
+    // Stage A: Quality-Aware Score
+    // Cap EV to prevent longshot domination
+    const evEff = Math.min(Math.max(pick.ev, 0), evCap);
 
-    // Sort Score (V12 Configurable)
-    const sortScore = (p.ev * 100) * wEV + (confScore * wConf);
+    // Alpha Score (Weighted Base)
+    const alphaScore = (evEff * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
 
-    // Alpha Score (V13 Fix: Compute if not present)
-    const alphaScore = (p.ev * 100 * wEV) + (p.p_model * 100 * wProb) + (confScore * wConf);
+    let finalScore = alphaScore;
+    const qualityFlags = [];
+
+    // Penalties
+    // 1. Vector Completeness
+    if (!pick.vector_complete || pick.missing_legs > 0) {
+        finalScore -= 40;
+        qualityFlags.push("incomplete_vector");
+    }
+
+    // 2. Devig Status
+    if (!pick.devig_applied) {
+        finalScore -= 15;
+        qualityFlags.push("no_devig");
+    }
+
+    // 3. Margin Penalty (if > 1.10)
+    if (pick.margin_sum && pick.margin_sum > 1.10) {
+        const pen = (pick.margin_sum - 1.10) * 100;
+        finalScore -= Math.min(pen, 30);
+        qualityFlags.push("high_margin");
+    }
+
+    // 4. Odds Tail Risk (if > 6.0)
+    if (pick.odds > 6.0) {
+        const pen = (pick.odds - 6.0) * 3;
+        finalScore -= Math.min(pen, 30);
+        qualityFlags.push("odds_tail");
+    }
 
     return {
-        ...p,
-        confidence_score: confScore,
-        confidence_tier: tier,
-        sort_score: Number(sortScore.toFixed(2)),
-        alpha_score: Number(alphaScore.toFixed(2))
+        score: Number(finalScore.toFixed(2)),
+        alpha_score: Number(alphaScore.toFixed(2)),
+        flags: qualityFlags
     };
-  }).sort((a, b) => b.sort_score - a.sort_score);
+}
 
-  const categorySeen = new Set();
-  const topPicks = [];
-  const others = [];
+function selectPortfolio(candidates, config) {
+    const portfolio = [];
+    const seenFamilies = new Set();
+    const timeframeCounts = { ft: 0, ht: 0, "2h": 0 };
 
-  for (const p of scored) {
-      if (!categorySeen.has(p.category)) {
-          categorySeen.add(p.category);
-          topPicks.push(p);
-      } else {
-          others.push(p);
-      }
-      if (topPicks.length >= 5) break;
-  }
+    for (const pick of candidates) {
+        if (portfolio.length >= 5) break;
 
-  if (topPicks.length < 5) {
-      for (const p of others) {
-          if (topPicks.length >= 5) break;
-          topPicks.push(p);
-      }
-  }
+        const fam = pick.market_family;
+        const tf = pick.timeframe;
 
-  return { all: scored, top: topPicks };
+        // Constraint 1: Max 1 per Market Family
+        if (seenFamilies.has(fam)) continue;
+
+        // Constraint 2: Max 2 per Timeframe
+        if (timeframeCounts[tf] >= 2) continue;
+
+        // Constraint 3: Correlation Clusters (Simple Heuristics)
+
+        // Goals Conflict (BTTS vs Over/Under)
+        const hasGoalPick = portfolio.some(p => p.market_family === 'goals_ou' || p.market_family === 'goals_btts');
+        if ((fam === 'goals_ou' || fam === 'goals_btts') && hasGoalPick) continue;
+
+        // Result Correlation (1X2 vs WinToNil)
+        const hasResultPick = portfolio.some(p => p.market_family === 'result_1x2' || p.market_family === 'result_dc');
+        if ((fam === 'combo_wtn') && hasResultPick) continue;
+
+        // Clean Sheet vs Result (Clean Sheet No ~= Goal Scored? Not always strongly correlated to result selection, but often correlated to Away Win)
+        // Leaving it open for now unless explicitly requested.
+
+        portfolio.push(pick);
+        seenFamilies.add(fam);
+        if (timeframeCounts[tf] !== undefined) timeframeCounts[tf]++;
+    }
+    return portfolio;
+}
+
+function rankAndFilterPicks(picks, meta, config) {
+  // 1. Scoring (Stage A)
+  const scored = picks.map(p => {
+      const confScore = calculateConfidenceScore(p, meta);
+      const tier = getConfidenceTier(confScore);
+      const pWithConf = { ...p, confidence_score: confScore, confidence_tier: tier };
+
+      const { score, alpha_score, flags } = calculateFinalScore(pWithConf, meta, config);
+
+      return {
+          ...pWithConf,
+          final_score: score,
+          alpha_score: alpha_score,
+          quality_flags: flags,
+          sort_score: score // Legacy compat
+      };
+  });
+
+  // 2. Sorting
+  scored.sort((a, b) => b.final_score - a.final_score);
+
+  // 3. Hard Gates (for Top Picks only)
+  // We keep everything in 'all_value_bets' (sorted), but filter for 'top_picks'
+  const playableCandidates = scored.filter(p => {
+      if (p.odds <= 1.01) return false;
+      if (p.quality_flags.includes("incomplete_vector")) return false;
+      return true;
+  });
+
+  // 4. Portfolio Selection (Stage B)
+  const topPicks = selectPortfolio(playableCandidates, config);
+
+  // 5. Watchlist (High Alpha but rejected/not-selected)
+  // e.g. High Score but Incomplete Vector, OR Valid but skipped due to correlation
+  const topIds = new Set(topPicks.map(p => p.market + p.selection));
+
+  const watchlist = scored
+      .filter(p => !topIds.has(p.market + p.selection) && p.alpha_score > 80)
+      .slice(0, 5);
+
+  return {
+      top: topPicks,
+      all: scored,
+      watchlist
+  };
 }
 
 // --- 7. Sanity Check (V12) ---
@@ -578,6 +662,7 @@ function runEngine(inputs, config = {}) {
       engine_warnings: warnings
     },
     top_picks: ranked.top,
+    watchlist: ranked.watchlist,
     all_value_bets: ranked.all
   };
 }
