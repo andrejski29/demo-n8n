@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V13.1 - Pro Ranking & Portfolio)
+// n8n Node: Probability Engine & EV Scanner (V13.2 - Pro Ranking & Portfolio)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -356,6 +356,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
 
         if (ev !== null && ev > minEV && edge > minEdge) {
             results.push({
+                match_id: matchRecord.match_id, // V13.2 Injection
                 market: marketDisplay,
                 selection: modelSel,
                 category: meta.category,
@@ -465,7 +466,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking & Portfolio (V13.1 Pro Selection) ---
+// --- 6. Ranking & Portfolio (V13.2 Pro Selection) ---
 
 function calculateFinalScore(pick, meta, config) {
     const wEV = config.rank_w_ev || 0.6;
@@ -474,11 +475,11 @@ function calculateFinalScore(pick, meta, config) {
     const evCap = config.rank_ev_cap || 0.75;
 
     // Stage A: Quality-Aware Score
-    // Cap EV to prevent longshot domination
     const evEff = Math.min(Math.max(pick.ev, 0), evCap);
 
     // Alpha Score (Weighted Base)
     const alphaScore = (evEff * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
+    const alphaRaw = (Math.max(pick.ev, 0) * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
 
     let finalScore = alphaScore;
     const qualityFlags = [];
@@ -492,12 +493,18 @@ function calculateFinalScore(pick, meta, config) {
 
     // 2. Devig Status
     if (!pick.devig_applied) {
-        finalScore -= 15;
-        qualityFlags.push("no_devig");
+        // V13.2 Fix: If non-exclusive, penalty is small
+        if (pick.devig_skip_reason === 'not_exclusive') {
+            finalScore -= 5;
+            qualityFlags.push("non_exclusive_market");
+        } else {
+            finalScore -= 15;
+            qualityFlags.push("no_devig");
+        }
     }
 
-    // 3. Margin Penalty (if > 1.10)
-    if (pick.margin_sum && pick.margin_sum > 1.10) {
+    // 3. Margin Penalty (Only if Exclusive or Valid)
+    if (pick.devig_skip_reason !== 'not_exclusive' && pick.margin_sum && pick.margin_sum > 1.10) {
         const pen = (pick.margin_sum - 1.10) * 100;
         finalScore -= Math.min(pen, 30);
         qualityFlags.push("high_margin");
@@ -513,6 +520,7 @@ function calculateFinalScore(pick, meta, config) {
     return {
         score: Number(finalScore.toFixed(2)),
         alpha_score: Number(alphaScore.toFixed(2)),
+        alpha_raw: Number(alphaRaw.toFixed(2)),
         flags: qualityFlags
     };
 }
@@ -521,36 +529,75 @@ function selectPortfolio(candidates, config) {
     const portfolio = [];
     const seenFamilies = new Set();
     const timeframeCounts = { ft: 0, ht: 0, "2h": 0 };
+    const candidatesWithReason = []; // To track for watchlist
 
-    for (const pick of candidates) {
-        if (portfolio.length >= 5) break;
+    // Pass Configuration
+    const passes = [
+        { maxFam: 1, maxTF: 2, strictCluster: true }, // Pass 1: Strict
+        { maxFam: 2, maxTF: 2, strictCluster: false }, // Pass 2: Relaxed Family & Cluster
+        { maxFam: 3, maxTF: 3, strictCluster: false }  // Pass 3: Fill
+    ];
 
-        const fam = pick.market_family;
-        const tf = pick.timeframe;
+    let currentPass = 0;
 
-        // Constraint 1: Max 1 per Market Family
-        if (seenFamilies.has(fam)) continue;
+    // We assume candidates are sorted.
+    // We iterate passes until we fill 5 slots or run out of passes.
 
-        // Constraint 2: Max 2 per Timeframe
-        if (timeframeCounts[tf] >= 2) continue;
+    while (portfolio.length < 5 && currentPass < passes.length) {
+        const rules = passes[currentPass];
 
-        // Constraint 3: Correlation Clusters (Simple Heuristics)
+        for (const pick of candidates) {
+            // Skip if already picked
+            if (portfolio.includes(pick)) continue;
+            if (portfolio.length >= 5) break;
 
-        // Goals Conflict (BTTS vs Over/Under)
-        const hasGoalPick = portfolio.some(p => p.market_family === 'goals_ou' || p.market_family === 'goals_btts');
-        if ((fam === 'goals_ou' || fam === 'goals_btts') && hasGoalPick) continue;
+            const fam = pick.market_family;
+            const tf = pick.timeframe;
+            let excludedReason = null;
 
-        // Result Correlation (1X2 vs WinToNil)
-        const hasResultPick = portfolio.some(p => p.market_family === 'result_1x2' || p.market_family === 'result_dc');
-        if ((fam === 'combo_wtn') && hasResultPick) continue;
+            // Rule 1: Family Limit
+            // Count existing families in portfolio
+            const famCount = portfolio.filter(p => p.market_family === fam).length;
+            if (famCount >= rules.maxFam) excludedReason = "max_family_limit";
 
-        // Clean Sheet vs Result (Clean Sheet No ~= Goal Scored? Not always strongly correlated to result selection, but often correlated to Away Win)
-        // Leaving it open for now unless explicitly requested.
+            // Rule 2: Timeframe Limit
+            const tfCount = timeframeCounts[tf] || 0;
+            if (!excludedReason && tfCount >= rules.maxTF) excludedReason = "max_timeframe_limit";
 
-        portfolio.push(pick);
-        seenFamilies.add(fam);
-        if (timeframeCounts[tf] !== undefined) timeframeCounts[tf]++;
+            // Rule 3: Clusters
+            if (!excludedReason) {
+                const hasGoalPick = portfolio.some(p => p.market_family === 'goals_ou' || p.market_family === 'goals_btts');
+
+                // Strict Cluster: Block cross-family Goals regardless of TF?
+                // V13.2: TF Aware blocking
+                // If strictCluster is true, we block if ANY goal pick exists? No, user said "cluster blocking timeframe-aware".
+
+                if (fam === 'goals_ou' || fam === 'goals_btts') {
+                    // Check if we have a goal pick in SAME timeframe
+                    const collision = portfolio.some(p => (p.market_family === 'goals_ou' || p.market_family === 'goals_btts') && p.timeframe === tf);
+                    if (collision) excludedReason = "cluster_goals_collision";
+                }
+
+                // Result Correlation (WinToNil vs 1X2)
+                if (fam === 'combo_wtn') {
+                    const resultCollision = portfolio.some(p => (p.market_family === 'result_1x2' || p.market_family === 'result_dc') && p.timeframe === tf);
+                    if (resultCollision) excludedReason = "cluster_result_collision";
+                }
+            }
+
+            if (!excludedReason) {
+                portfolio.push(pick);
+                seenFamilies.add(fam); // Kept for reference
+                if (timeframeCounts[tf] !== undefined) timeframeCounts[tf]++;
+                pick.selection_pass = currentPass + 1;
+            } else {
+                // Track reason for the first time it fails (in Pass 1 usually)
+                if (!pick.excluded_reason && currentPass === 0) pick.excluded_reason = excludedReason;
+            }
+        }
+        currentPass++;
     }
+
     return portfolio;
 }
 
@@ -561,14 +608,22 @@ function rankAndFilterPicks(picks, meta, config) {
       const tier = getConfidenceTier(confScore);
       const pWithConf = { ...p, confidence_score: confScore, confidence_tier: tier };
 
-      const { score, alpha_score, flags } = calculateFinalScore(pWithConf, meta, config);
+      const { score, alpha_score, alpha_raw, flags } = calculateFinalScore(pWithConf, meta, config);
+
+      // Stable ID Generation (V13.2)
+      // match_id|family|timeframe|market|selection|line
+      const lineStr = p.line !== undefined ? `_${p.line}` : '';
+      const stableId = `${p.match_id}|${p.market_family}|${p.timeframe}|${p.market}|${p.selection}${lineStr}`;
 
       return {
           ...pWithConf,
+          id: stableId,
           final_score: score,
           alpha_score: alpha_score,
+          alpha_raw: alpha_raw, // Audit
           quality_flags: flags,
-          sort_score: score // Legacy compat
+          sort_score: score,
+          ev_raw: p.ev // Already raw
       };
   });
 
@@ -576,22 +631,21 @@ function rankAndFilterPicks(picks, meta, config) {
   scored.sort((a, b) => b.final_score - a.final_score);
 
   // 3. Hard Gates (for Top Picks only)
-  // We keep everything in 'all_value_bets' (sorted), but filter for 'top_picks'
   const playableCandidates = scored.filter(p => {
       if (p.odds <= 1.01) return false;
       if (p.quality_flags.includes("incomplete_vector")) return false;
       return true;
   });
 
-  // 4. Portfolio Selection (Stage B)
+  // 4. Portfolio Selection (Stage B - 3 Pass)
   const topPicks = selectPortfolio(playableCandidates, config);
 
-  // 5. Watchlist (High Alpha but rejected/not-selected)
-  // e.g. High Score but Incomplete Vector, OR Valid but skipped due to correlation
-  const topIds = new Set(topPicks.map(p => p.market + p.selection));
+  // 5. Watchlist
+  // Items in scored (valid or not) that are NOT in topPicks, sorted by alpha
+  const topIds = new Set(topPicks.map(p => p.id));
 
   const watchlist = scored
-      .filter(p => !topIds.has(p.market + p.selection) && p.alpha_score > 80)
+      .filter(p => !topIds.has(p.id) && p.alpha_score > 80)
       .slice(0, 5);
 
   return {
@@ -603,11 +657,9 @@ function rankAndFilterPicks(picks, meta, config) {
 
 // --- 7. Sanity Check (V12) ---
 function runSanityChecks(markets, probs, warnings) {
-    // 1X2 Sum
     const sum1X2 = markets.ft_1x2.home + markets.ft_1x2.draw + markets.ft_1x2.away;
     if (Math.abs(sum1X2 - 1) > 0.001) warnings.push(`sanity_1x2_sum_drift_${sum1X2.toFixed(4)}`);
 
-    // BTTS Sum
     const sumBTTS = markets.ft_btts.yes + markets.ft_btts.no;
     if (Math.abs(sumBTTS - 1) > 0.001) warnings.push(`sanity_btts_sum_drift_${sumBTTS.toFixed(4)}`);
 }
@@ -633,13 +685,11 @@ function runEngine(inputs, config = {}) {
   const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
   const marketsCorners = deriveCornerMarkets(matrixCorners);
 
-  // V12: Sanity Check
   runSanityChecks(marketsFT, null, warnings);
 
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
-  // Inject Source into Picks for transparency
   rawPicks.forEach(p => p.lambda_source = source);
 
   const ranked = rankAndFilterPicks(rawPicks, { source, warnings }, config);
