@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V13.3 - Mismatch Safety)
+// n8n Node: Probability Engine & EV Scanner (V13.4 - Smart Mismatch & Portfolio)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -307,6 +307,21 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   const maxOdds = config.max_odds || 100.0;
   const exclude = config.exclude_markets || [];
 
+  // V13.4: Pre-calculate 1X2 Devig for DC Mismatch Safety
+  let ft1x2Fair = null;
+  const ft1x2Keys = { "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away" };
+  const ft1x2Vector = {};
+  let has1x2 = true;
+  for (const [sel, k] of Object.entries(ft1x2Keys)) {
+      const o = resolveOdds(odds, k);
+      if (o) ft1x2Vector[sel] = o.odds;
+      else has1x2 = false;
+  }
+  if (has1x2) {
+      const devig = marginAdjustedProb(ft1x2Vector, "1X2");
+      if (devig.prob) ft1x2Fair = devig.prob;
+  }
+
   const process = (marketDisplay, modelProbs, mapping, meta) => {
     if (exclude.some(ex => marketDisplay.includes(ex))) return;
 
@@ -349,15 +364,37 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
         const pModel = modelProbs[modelSel];
         if (pModel < minProb) continue;
 
-        const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
+        // V13.4: Determine P_Market for Safety Check
+        let pMarketSafety = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
+
+        // Special Case: DC Mismatch derived from 1X2 Fair
+        if (meta.family === 'result_dc' && ft1x2Fair) {
+            if (modelSel === '1x') pMarketSafety = ft1x2Fair.home + ft1x2Fair.draw;
+            else if (modelSel === '12') pMarketSafety = ft1x2Fair.home + ft1x2Fair.away;
+            else if (modelSel === 'x2') pMarketSafety = ft1x2Fair.draw + ft1x2Fair.away;
+        }
+
+        const pMarketImplied = (1 / offered.odds); // For EV calc, use actual price
+        // Use Devig if available for EV? Standard is yes.
+        // User instruction: "keep current p_market for EV if you want".
+        // Current code uses `marketProbs ? marketProbs : implied`.
+        const pMarketForEV = marketProbs ? marketProbs[modelSel] : pMarketImplied;
+
         const ev = calculateEV(pModel, offered.odds);
-        const edge = pModel - pMarket;
+        const edge = pModel - pMarketForEV;
         const kelly = calculateKelly(pModel, offered.odds, 0.25);
 
-        // V13.3 Safety: Model Mismatch Flag
-        let mismatchFlag = false;
-        if (Math.abs(pModel - pMarket) > 0.20) {
-            mismatchFlag = true;
+        // Safety Flags
+        const qualityFlags = [];
+
+        // 1. Absolute Mismatch
+        if (Math.abs(pModel - pMarketSafety) > 0.20) {
+            qualityFlags.push("model_mismatch_major");
+        }
+
+        // 2. Ratio Mismatch
+        if (pMarketSafety > 0.03 && (pModel / pMarketSafety > 2.5)) {
+            qualityFlags.push("model_mismatch_ratio");
         }
 
         if (ev !== null && ev > minEV && edge > minEdge) {
@@ -371,7 +408,8 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 line: meta.line,
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
-                p_market: Number(pMarket.toFixed(4)),
+                p_market: Number(pMarketForEV.toFixed(4)),
+                p_market_safety: Number(pMarketSafety.toFixed(4)), // Debug
                 edge: Number(edge.toFixed(4)),
                 ev: Number(ev.toFixed(4)),
                 kelly: Number(kelly.toFixed(4)),
@@ -383,7 +421,8 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 missing_legs: missingLegs,
                 margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
                 lambda_source: meta.source,
-                is_mismatch: mismatchFlag, // New Internal Flag
+                is_mismatch: (qualityFlags.length > 0),
+                quality_flags: qualityFlags, // Pass to Ranker
                 alpha_score: 0
             });
         }
@@ -473,7 +512,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking & Portfolio (V13.3 Pro Selection) ---
+// --- 6. Ranking & Portfolio (V13.4 Pro Selection) ---
 
 function calculateFinalScore(pick, meta, config) {
     const wEV = config.rank_w_ev || 0.6;
@@ -487,7 +526,9 @@ function calculateFinalScore(pick, meta, config) {
     const alphaRaw = (Math.max(pick.ev, 0) * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
 
     let finalScore = alphaScore;
-    const qualityFlags = [];
+
+    // Merge Scanner flags + Scoring flags
+    const qualityFlags = [...(pick.quality_flags || [])];
 
     // Penalties
     if (!pick.vector_complete || pick.missing_legs > 0) {
@@ -517,17 +558,17 @@ function calculateFinalScore(pick, meta, config) {
         qualityFlags.push("odds_tail");
     }
 
-    // V13.3 Safety: Mismatch Penalty
+    // Mismatch Penalty (Flagged in Scan)
     if (pick.is_mismatch) {
         finalScore -= 25;
-        qualityFlags.push("model_mismatch_major");
+        // Flag already in quality_flags from scan
     }
 
     return {
         score: Number(finalScore.toFixed(2)),
         alpha_score: Number(alphaScore.toFixed(2)),
         alpha_raw: Number(alphaRaw.toFixed(2)),
-        flags: qualityFlags
+        flags: [...new Set(qualityFlags)] // Dedupe
     };
 }
 
@@ -613,9 +654,15 @@ function rankAndFilterPicks(picks, meta, config) {
 
   scored.sort((a, b) => b.final_score - a.final_score);
 
+  // V13.4: Hard Filter for Mismatch (Optional)
+  const excludeMismatch = config.exclude_mismatch || false; // Default off, or true? User said "optionally".
+
   const playableCandidates = scored.filter(p => {
       if (p.odds <= 1.01) return false;
       if (p.quality_flags.includes("incomplete_vector")) return false;
+
+      if (excludeMismatch && p.is_mismatch) return false;
+
       return true;
   });
 
