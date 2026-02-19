@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V13.2 - Pro Ranking & Portfolio)
+// n8n Node: Probability Engine & EV Scanner (V13.3 - Mismatch Safety)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -354,9 +354,15 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
         const edge = pModel - pMarket;
         const kelly = calculateKelly(pModel, offered.odds, 0.25);
 
+        // V13.3 Safety: Model Mismatch Flag
+        let mismatchFlag = false;
+        if (Math.abs(pModel - pMarket) > 0.20) {
+            mismatchFlag = true;
+        }
+
         if (ev !== null && ev > minEV && edge > minEdge) {
             results.push({
-                match_id: matchRecord.match_id, // V13.2 Injection
+                match_id: matchRecord.match_id,
                 market: marketDisplay,
                 selection: modelSel,
                 category: meta.category,
@@ -377,6 +383,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
                 missing_legs: missingLegs,
                 margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
                 lambda_source: meta.source,
+                is_mismatch: mismatchFlag, // New Internal Flag
                 alpha_score: 0
             });
         }
@@ -466,7 +473,7 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking & Portfolio (V13.2 Pro Selection) ---
+// --- 6. Ranking & Portfolio (V13.3 Pro Selection) ---
 
 function calculateFinalScore(pick, meta, config) {
     const wEV = config.rank_w_ev || 0.6;
@@ -474,10 +481,8 @@ function calculateFinalScore(pick, meta, config) {
     const wConf = config.rank_w_conf || 0.4;
     const evCap = config.rank_ev_cap || 0.75;
 
-    // Stage A: Quality-Aware Score
     const evEff = Math.min(Math.max(pick.ev, 0), evCap);
 
-    // Alpha Score (Weighted Base)
     const alphaScore = (evEff * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
     const alphaRaw = (Math.max(pick.ev, 0) * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
 
@@ -485,15 +490,12 @@ function calculateFinalScore(pick, meta, config) {
     const qualityFlags = [];
 
     // Penalties
-    // 1. Vector Completeness
     if (!pick.vector_complete || pick.missing_legs > 0) {
         finalScore -= 40;
         qualityFlags.push("incomplete_vector");
     }
 
-    // 2. Devig Status
     if (!pick.devig_applied) {
-        // V13.2 Fix: If non-exclusive, penalty is small
         if (pick.devig_skip_reason === 'not_exclusive') {
             finalScore -= 5;
             qualityFlags.push("non_exclusive_market");
@@ -503,18 +505,22 @@ function calculateFinalScore(pick, meta, config) {
         }
     }
 
-    // 3. Margin Penalty (Only if Exclusive or Valid)
     if (pick.devig_skip_reason !== 'not_exclusive' && pick.margin_sum && pick.margin_sum > 1.10) {
         const pen = (pick.margin_sum - 1.10) * 100;
         finalScore -= Math.min(pen, 30);
         qualityFlags.push("high_margin");
     }
 
-    // 4. Odds Tail Risk (if > 6.0)
     if (pick.odds > 6.0) {
         const pen = (pick.odds - 6.0) * 3;
         finalScore -= Math.min(pen, 30);
         qualityFlags.push("odds_tail");
+    }
+
+    // V13.3 Safety: Mismatch Penalty
+    if (pick.is_mismatch) {
+        finalScore -= 25;
+        qualityFlags.push("model_mismatch_major");
     }
 
     return {
@@ -529,25 +535,19 @@ function selectPortfolio(candidates, config) {
     const portfolio = [];
     const seenFamilies = new Set();
     const timeframeCounts = { ft: 0, ht: 0, "2h": 0 };
-    const candidatesWithReason = []; // To track for watchlist
 
-    // Pass Configuration
     const passes = [
-        { maxFam: 1, maxTF: 2, strictCluster: true }, // Pass 1: Strict
-        { maxFam: 2, maxTF: 2, strictCluster: false }, // Pass 2: Relaxed Family & Cluster
-        { maxFam: 3, maxTF: 3, strictCluster: false }  // Pass 3: Fill
+        { maxFam: 1, maxTF: 2, strictCluster: true },
+        { maxFam: 2, maxTF: 2, strictCluster: false },
+        { maxFam: 3, maxTF: 3, strictCluster: false }
     ];
 
     let currentPass = 0;
-
-    // We assume candidates are sorted.
-    // We iterate passes until we fill 5 slots or run out of passes.
 
     while (portfolio.length < 5 && currentPass < passes.length) {
         const rules = passes[currentPass];
 
         for (const pick of candidates) {
-            // Skip if already picked
             if (portfolio.includes(pick)) continue;
             if (portfolio.length >= 5) break;
 
@@ -555,30 +555,18 @@ function selectPortfolio(candidates, config) {
             const tf = pick.timeframe;
             let excludedReason = null;
 
-            // Rule 1: Family Limit
-            // Count existing families in portfolio
             const famCount = portfolio.filter(p => p.market_family === fam).length;
             if (famCount >= rules.maxFam) excludedReason = "max_family_limit";
 
-            // Rule 2: Timeframe Limit
             const tfCount = timeframeCounts[tf] || 0;
             if (!excludedReason && tfCount >= rules.maxTF) excludedReason = "max_timeframe_limit";
 
-            // Rule 3: Clusters
             if (!excludedReason) {
-                const hasGoalPick = portfolio.some(p => p.market_family === 'goals_ou' || p.market_family === 'goals_btts');
-
-                // Strict Cluster: Block cross-family Goals regardless of TF?
-                // V13.2: TF Aware blocking
-                // If strictCluster is true, we block if ANY goal pick exists? No, user said "cluster blocking timeframe-aware".
-
                 if (fam === 'goals_ou' || fam === 'goals_btts') {
-                    // Check if we have a goal pick in SAME timeframe
                     const collision = portfolio.some(p => (p.market_family === 'goals_ou' || p.market_family === 'goals_btts') && p.timeframe === tf);
                     if (collision) excludedReason = "cluster_goals_collision";
                 }
 
-                // Result Correlation (WinToNil vs 1X2)
                 if (fam === 'combo_wtn') {
                     const resultCollision = portfolio.some(p => (p.market_family === 'result_1x2' || p.market_family === 'result_dc') && p.timeframe === tf);
                     if (resultCollision) excludedReason = "cluster_result_collision";
@@ -587,11 +575,10 @@ function selectPortfolio(candidates, config) {
 
             if (!excludedReason) {
                 portfolio.push(pick);
-                seenFamilies.add(fam); // Kept for reference
+                seenFamilies.add(fam);
                 if (timeframeCounts[tf] !== undefined) timeframeCounts[tf]++;
                 pick.selection_pass = currentPass + 1;
             } else {
-                // Track reason for the first time it fails (in Pass 1 usually)
                 if (!pick.excluded_reason && currentPass === 0) pick.excluded_reason = excludedReason;
             }
         }
@@ -602,7 +589,6 @@ function selectPortfolio(candidates, config) {
 }
 
 function rankAndFilterPicks(picks, meta, config) {
-  // 1. Scoring (Stage A)
   const scored = picks.map(p => {
       const confScore = calculateConfidenceScore(p, meta);
       const tier = getConfidenceTier(confScore);
@@ -610,8 +596,6 @@ function rankAndFilterPicks(picks, meta, config) {
 
       const { score, alpha_score, alpha_raw, flags } = calculateFinalScore(pWithConf, meta, config);
 
-      // Stable ID Generation (V13.2)
-      // match_id|family|timeframe|market|selection|line
       const lineStr = p.line !== undefined ? `_${p.line}` : '';
       const stableId = `${p.match_id}|${p.market_family}|${p.timeframe}|${p.market}|${p.selection}${lineStr}`;
 
@@ -620,28 +604,23 @@ function rankAndFilterPicks(picks, meta, config) {
           id: stableId,
           final_score: score,
           alpha_score: alpha_score,
-          alpha_raw: alpha_raw, // Audit
+          alpha_raw: alpha_raw,
           quality_flags: flags,
           sort_score: score,
-          ev_raw: p.ev // Already raw
+          ev_raw: p.ev
       };
   });
 
-  // 2. Sorting
   scored.sort((a, b) => b.final_score - a.final_score);
 
-  // 3. Hard Gates (for Top Picks only)
   const playableCandidates = scored.filter(p => {
       if (p.odds <= 1.01) return false;
       if (p.quality_flags.includes("incomplete_vector")) return false;
       return true;
   });
 
-  // 4. Portfolio Selection (Stage B - 3 Pass)
   const topPicks = selectPortfolio(playableCandidates, config);
 
-  // 5. Watchlist
-  // Items in scored (valid or not) that are NOT in topPicks, sorted by alpha
   const topIds = new Set(topPicks.map(p => p.id));
 
   const watchlist = scored
