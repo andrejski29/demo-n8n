@@ -105,7 +105,7 @@ const computeTeamFeatures = (teamObj) => {
     { outKey: "p_half_with_most_corners_tie_overall", srcKey: "half_with_most_corners_is_draw_percentage_overall" },
   ], need);
   */
-  
+
   // REPRODUCING THE BUG
   addPctProbs(features, stats, [
     { outKey: "p_half_with_most_corners_2h_overall", srcKey: "half_with_most_corners_is_2h_percentage_overall" },

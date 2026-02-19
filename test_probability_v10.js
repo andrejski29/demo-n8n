@@ -16,14 +16,14 @@ try {
     console.log("\n--- Audit Check: Corners O/U 10.5 ---");
     // Find Corners O/U 10.5 Under pick
     const cornerPick = result.all_value_bets.find(p => p.market === "Corners O/U 10.5" && p.selection === "under");
-    
+
     if (cornerPick) {
         console.log(`Found Pick: ${cornerPick.market} ${cornerPick.selection}`);
         console.log(`Odds: ${cornerPick.odds}`);
         console.log(`Devig Applied: ${cornerPick.devig_applied}`);
         console.log(`P_Market Source: ${cornerPick.p_market_source}`);
         console.log(`P_Market Value: ${cornerPick.p_market}`);
-        
+
         // Implied = 1/1.7 = 0.588. If Devig Applied, P_Market < 0.588
         const implied = 1 / 1.7;
         if (cornerPick.p_market < implied) {
@@ -34,7 +34,7 @@ try {
     } else {
         console.log("FAIL: Corners O/U 10.5 Under not found in value bets.");
     }
-    
+
     console.log("\n--- Top Picks (Filtered min_ev > 0.02) ---");
     result.top_picks.forEach(p => {
          console.log(`[${p.category}] ${p.market}: EV ${(p.ev*100).toFixed(1)}%`);

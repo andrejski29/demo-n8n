@@ -1,8 +1,8 @@
 /**
  * Daily Picks Selector Node (v2.5.2 FR - French Market Variant)
- * 
+ *
  * Based on v2.5.2 Standard
- * 
+ *
  * Specific FR Rules:
  * - Exclude all Corners markets
  * - Exclude all Cards markets
@@ -48,7 +48,7 @@ const CONFIG = {
         reuse_policy: "core_only", // "none" | "core_only" | "full"
         mid_combo_max_reuse: 1,    // Max 1 reused single allowed in Mid Combo
         diversity_factor: 0.97,    // Multiplier applied to probability score if market families match
-        
+
         core_double: {
             max_leg_odds: 2.20,
             min_total: 1.80
@@ -79,10 +79,10 @@ const CONFIG = {
 function selectDailyPortfolio(allBets) {
     // 1. Group by Day (UTC YYYY-MM-DD)
     const betsByDay = {};
-    
+
     allBets.forEach(bet => {
         if (!bet.date_iso) return;
-        
+
         let dayKey = "UNKNOWN";
         try {
             if (/^\d{4}-\d{2}-\d{2}/.test(bet.date_iso)) {
@@ -124,7 +124,7 @@ function processDay(day, bets) {
 
     bets.forEach(rawBet => {
         const bet = sanitizeBet(rawBet);
-        
+
         if (!bet) {
             skipped.push({ id: rawBet.match_id || 'no_id', reason: 'Invalid Data' });
             return;
@@ -176,7 +176,7 @@ function processDay(day, bets) {
 
     // C. Select Singles
     const selectedTiers = { core: [], value: [], high_pot: [] };
-    
+
     // Sorter: Prob Desc > Conf Desc > SortScore Desc > EV Desc > MatchID (Deterministic)
     const sorter = (a, b) => {
         if (b.p_model !== a.p_model) return b.p_model - a.p_model;
@@ -193,30 +193,30 @@ function processDay(day, bets) {
     const finalHighPot = selectedTiers.high_pot.sort(sorter).slice(0, CONFIG.high_pot.limit_count);
 
     // D. Generate Combos
-    
+
     // 1. Identify Match IDs for Reuse Policy
     const coreIds = new Set(finalCore.map(b => b.match_id));
     const valueIds = new Set(finalValue.map(b => b.match_id));
     const highPotIds = new Set(finalHighPot.map(b => b.match_id));
     const allSinglesIds = new Set([...coreIds, ...valueIds, ...highPotIds]);
-    
+
     let allowedReuseIds = new Set();
     const policy = CONFIG.combos.reuse_policy;
-    
+
     if (policy === 'full') {
         allowedReuseIds = allSinglesIds;
     } else if (policy === 'core_only') {
         allowedReuseIds = coreIds;
-    } 
+    }
 
     // We use the full sorted pool for combos
     const comboPool = Object.values(bestPerMatch).sort(sorter);
     const combos = { core_double: null, smart_double: null, mid_combo: null, debug: [] };
-    const comboUsedMatches = new Set(); 
+    const comboUsedMatches = new Set();
 
     const getDoubleCandidates = (maxOdds) => {
-        return comboPool.filter(b => 
-            !comboUsedMatches.has(b.match_id) && 
+        return comboPool.filter(b =>
+            !comboUsedMatches.has(b.match_id) &&
             b.odds <= maxOdds &&
             (!allSinglesIds.has(b.match_id) || allowedReuseIds.has(b.match_id))
         );
@@ -227,8 +227,8 @@ function processDay(day, bets) {
     const coreDouble = pickBestDouble(pool, CONFIG.combos.core_double.min_total);
 
     if (coreDouble) {
-        combos.core_double = { 
-            type: "CORE DOUBLE", 
+        combos.core_double = {
+            type: "CORE DOUBLE",
             legs: coreDouble.legs,
             total_odds: coreDouble.total_odds
         };
@@ -243,10 +243,10 @@ function processDay(day, bets) {
     const smartDouble = pickBestDouble(pool, CONFIG.combos.smart_double.min_total);
 
     if (smartDouble) {
-        combos.smart_double = { 
-            type: "SMART DOUBLE", 
+        combos.smart_double = {
+            type: "SMART DOUBLE",
             legs: smartDouble.legs,
-            total_odds: smartDouble.total_odds 
+            total_odds: smartDouble.total_odds
         };
         comboUsedMatches.add(smartDouble.legs[0].match_id);
         comboUsedMatches.add(smartDouble.legs[1].match_id);
@@ -255,13 +255,13 @@ function processDay(day, bets) {
     }
 
     // 3. MID COMBO
-    const midCandidates = comboPool.filter(b => 
+    const midCandidates = comboPool.filter(b =>
         !comboUsedMatches.has(b.match_id) &&
         b.odds >= CONFIG.combos.mid_combo.min_leg_odds &&
         b.odds <= CONFIG.combos.mid_combo.max_leg_odds
     );
 
-    combos.mid_combo = generateMidComboRecursive(midCandidates, 3, allSinglesIds, allowedReuseIds) 
+    combos.mid_combo = generateMidComboRecursive(midCandidates, 3, allSinglesIds, allowedReuseIds)
                     || generateMidComboRecursive(midCandidates, 2, allSinglesIds, allowedReuseIds);
 
     if (!combos.mid_combo) {
@@ -295,7 +295,7 @@ function processDay(day, bets) {
  */
 function isMarketAllowed(bet) {
     const filters = CONFIG.market_filters.exclude_patterns;
-    
+
     const fieldsToCheck = [
         bet.market_family || "",
         bet.category || "",
@@ -310,7 +310,7 @@ function isMarketAllowed(bet) {
             }
         }
     }
-    
+
     return true; // Allowed
 }
 
@@ -335,7 +335,7 @@ function sanitizeBet(bet) {
     };
 
     const cleanBet = { ...bet };
-    
+
     cleanBet.odds = parseOdds(bet.odds);
     if (cleanBet.odds === 0) return null;
 
@@ -343,7 +343,7 @@ function sanitizeBet(bet) {
     cleanBet.confidence_score = parseNum(bet.confidence_score);
     cleanBet.sort_score = parseNum(bet.sort_score);
     cleanBet.ev = parseNum(bet.ev);
-    
+
     return cleanBet;
 }
 
@@ -375,17 +375,17 @@ function pickBestDouble(pool, minTotal, maxCheck = 25) {
                 const pairProb = a.p_model * b.p_model;
                 const minConf = Math.min(a.confidence_score, b.confidence_score);
                 const sumEV = a.ev + b.ev;
-                
+
                 // Diversity Bonus (Multiplicative)
-                const diversityFactor = (a.market_family && b.market_family && a.market_family === b.market_family) 
-                    ? CONFIG.combos.diversity_factor 
+                const diversityFactor = (a.market_family && b.market_family && a.market_family === b.market_family)
+                    ? CONFIG.combos.diversity_factor
                     : 1.0;
-                
+
                 // Composite Score
-                const score = (pairProb * diversityFactor * 10000) 
+                const score = (pairProb * diversityFactor * 10000)
                             + (minConf * 100)
                             + (sumEV * 10)
-                            - total; 
+                            - total;
 
                 const candidate = {
                     legs: [a, b],
@@ -422,7 +422,7 @@ function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuse
 
         for (let i = index; i < Math.min(pool.length, 15); i++) {
             const nextLeg = pool[i];
-            
+
             // --- REUSE & POLICY CHECKS ---
             const isSingle = allSinglesIds.has(nextLeg.match_id);
             if (isSingle && !allowedReuseIds.has(nextLeg.match_id)) continue;
@@ -438,9 +438,9 @@ function generateMidComboRecursive(pool, targetLegs, allSinglesIds, allowedReuse
             if (nextFamilyCounts[fam] > maxSameFamily) continue;
 
             const res = search(
-                i + 1, 
-                [...currentCombo, nextLeg], 
-                newOdds, 
+                i + 1,
+                [...currentCombo, nextLeg],
+                newOdds,
                 reuseCount + (isSingle ? 1 : 0),
                 nextFamilyCounts
             );
@@ -465,7 +465,7 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
         } else {
              input = items.map(i => i.json);
         }
-        
+
         const portfolios = selectDailyPortfolio(input);
         return portfolios.map(p => ({ json: p }));
     } catch (e) {

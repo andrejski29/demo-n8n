@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Probability Engine & EV Scanner (V12 - Prod Safety & Audited)
+// n8n Node: Probability Engine & EV Scanner (V13.4 - Smart Mismatch & Portfolio)
 // -------------------------
 
 // --- 1. Math Helpers ---
@@ -27,7 +27,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
   const matrix = [];
   let totalProb = 0;
 
-  // Precompute PMFs (V12 Optimization)
+  // Precompute PMFs
   const distHome = [];
   const distAway = [];
   for (let k = 0; k <= maxGoals; k++) {
@@ -46,7 +46,7 @@ function buildScoreMatrix(lambdaHome, lambdaAway, hardMax = null) {
     matrix.push(row);
   }
 
-  // Renormalize (V12 Safety: Check epsilon drift)
+  // Renormalize
   if (Math.abs(totalProb - 1.0) > 1e-9) {
     for (let h = 0; h <= maxGoals; h++) {
       for (let a = 0; a <= maxGoals; a++) {
@@ -62,7 +62,7 @@ function deriveMarketsFromMatrix(matrix, prefix = "ft") {
   const markets = {
     [`${prefix}_1x2`]: { home: 0, draw: 0, away: 0 },
     [`${prefix}_btts`]: { yes: 0, no: 0 },
-    [`${prefix}_goals`]: {}, 
+    [`${prefix}_goals`]: {},
     [`${prefix}_clean_sheet`]: { home: 0, away: 0 },
     [`${prefix}_win_to_nil`]: { home: 0, away: 0 },
     [`${prefix}_double_chance`]: { "1x": 0, "12": 0, "x2": 0 }
@@ -113,7 +113,7 @@ function deriveCornerMarkets(matrix) {
         corners_1x2: { home: 0, draw: 0, away: 0 },
         corners_ou: {}
     };
-    
+
     const lines = [7.5, 8.5, 9.5, 10.5, 11.5];
     lines.forEach(L => markets.corners_ou[L] = { over: 0, under: 0 });
 
@@ -122,7 +122,7 @@ function deriveCornerMarkets(matrix) {
     for (let h = 0; h <= maxCounts; h++) {
         for (let a = 0; a <= maxCounts; a++) {
             const p = matrix[h][a];
-            
+
             if (h > a) markets.corners_1x2.home += p;
             else if (a > h) markets.corners_1x2.away += p;
             else markets.corners_1x2.draw += p;
@@ -169,11 +169,11 @@ function estimateLambdas(matchRecord) {
   }
 
   const sigXG = matchRecord.signals?.xg;
-  
+
   if (sigXG && sigXG.home > 0.1 && sigXG.away > 0.1) {
       lambdaHome = sigXG.home;
       lambdaAway = sigXG.away;
-      source = "xg_signal";
+      source = "signal_xg";
   } else if (ctxXG_A > 0.1) {
       lambdaHome = ctxXG_A;
       lambdaAway = ctxXG_B;
@@ -181,14 +181,15 @@ function estimateLambdas(matchRecord) {
   } else if (matchRecord.signals?.ppg?.home > 0) {
       lambdaHome = Math.max(0.5, matchRecord.signals.ppg.home * 0.8);
       lambdaAway = Math.max(0.5, matchRecord.signals.ppg.away * 0.8);
-      source = "ppg_signal_heuristic";
+      source = "signal_ppg_heuristic";
   } else if (ctxPPG_H > 0) {
       lambdaHome = Math.max(0.5, ctxPPG_H * 0.8);
       lambdaAway = Math.max(0.5, ctxPPG_A * 0.8);
       source = "context_ppg_heuristic";
   } else {
-      lambdaHome = 1.35; 
+      lambdaHome = 1.35;
       lambdaAway = 1.10;
+      source = "hard_fallback_1.35_1.10";
   }
 
   const hFor = getStat(matchRecord, "team_stats.home.season_stats.features.corners_for_pm_overall") || 4.5;
@@ -223,9 +224,9 @@ function calculateKelly(p, odds, fraction = 0.25) {
 }
 
 function calculateConfidenceScore(pick, meta) {
-    let score = 50; 
+    let score = 50;
 
-    if (meta.source === 'xg_signal') score += 20;
+    if (meta.source === 'signal_xg') score += 20;
     else if (meta.source === 'context_xg') score += 15;
     else if (meta.source.includes('ppg')) score += 5;
     else if (meta.source.includes('fallback')) score -= 15;
@@ -233,7 +234,7 @@ function calculateConfidenceScore(pick, meta) {
     if (pick.devig_applied) score += 5;
 
     if (pick.timeframe === 'ft') score += 0;
-    else score -= 5; 
+    else score -= 5;
 
     if (pick.edge > 0.05) score += 5;
     if (pick.ev > 0.10) score += 5;
@@ -306,6 +307,21 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   const maxOdds = config.max_odds || 100.0;
   const exclude = config.exclude_markets || [];
 
+  // V13.4: Pre-calculate 1X2 Devig for DC Mismatch Safety
+  let ft1x2Fair = null;
+  const ft1x2Keys = { "home": "ft_1x2_home", "draw": "ft_1x2_draw", "away": "ft_1x2_away" };
+  const ft1x2Vector = {};
+  let has1x2 = true;
+  for (const [sel, k] of Object.entries(ft1x2Keys)) {
+      const o = resolveOdds(odds, k);
+      if (o) ft1x2Vector[sel] = o.odds;
+      else has1x2 = false;
+  }
+  if (has1x2) {
+      const devig = marginAdjustedProb(ft1x2Vector, "1X2");
+      if (devig.prob) ft1x2Fair = devig.prob;
+  }
+
   const process = (marketDisplay, modelProbs, mapping, meta) => {
     if (exclude.some(ex => marketDisplay.includes(ex))) return;
 
@@ -342,39 +358,72 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
         const offered = resolveOdds(odds, oddKey, legacyKey);
 
         if (!offered) continue;
-        
+
         if (offered.odds < minOdds || offered.odds > maxOdds) continue;
 
         const pModel = modelProbs[modelSel];
         if (pModel < minProb) continue;
 
-        const pMarket = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
+        // V13.4: Determine P_Market for Safety Check
+        let pMarketSafety = marketProbs ? marketProbs[modelSel] : (1 / offered.odds);
+
+        // Special Case: DC Mismatch derived from 1X2 Fair
+        if (meta.family === 'result_dc' && ft1x2Fair) {
+            if (modelSel === '1x') pMarketSafety = ft1x2Fair.home + ft1x2Fair.draw;
+            else if (modelSel === '12') pMarketSafety = ft1x2Fair.home + ft1x2Fair.away;
+            else if (modelSel === 'x2') pMarketSafety = ft1x2Fair.draw + ft1x2Fair.away;
+        }
+
+        const pMarketImplied = (1 / offered.odds); // For EV calc, use actual price
+        // Use Devig if available for EV? Standard is yes.
+        // User instruction: "keep current p_market for EV if you want".
+        // Current code uses `marketProbs ? marketProbs : implied`.
+        const pMarketForEV = marketProbs ? marketProbs[modelSel] : pMarketImplied;
+
         const ev = calculateEV(pModel, offered.odds);
-        const edge = pModel - pMarket;
+        const edge = pModel - pMarketForEV;
         const kelly = calculateKelly(pModel, offered.odds, 0.25);
+
+        // Safety Flags
+        const qualityFlags = [];
+
+        // 1. Absolute Mismatch
+        if (Math.abs(pModel - pMarketSafety) > 0.20) {
+            qualityFlags.push("model_mismatch_major");
+        }
+
+        // 2. Ratio Mismatch
+        if (pMarketSafety > 0.03 && (pModel / pMarketSafety > 2.5)) {
+            qualityFlags.push("model_mismatch_ratio");
+        }
 
         if (ev !== null && ev > minEV && edge > minEdge) {
             results.push({
+                match_id: matchRecord.match_id,
                 market: marketDisplay,
                 selection: modelSel,
                 category: meta.category,
-                market_family: meta.family, 
-                timeframe: meta.timeframe, 
+                market_family: meta.family,
+                timeframe: meta.timeframe,
                 line: meta.line,
                 odds: offered.odds,
                 p_model: Number(pModel.toFixed(4)),
-                p_market: Number(pMarket.toFixed(4)),
+                p_market: Number(pMarketForEV.toFixed(4)),
+                p_market_safety: Number(pMarketSafety.toFixed(4)), // Debug
                 edge: Number(edge.toFixed(4)),
                 ev: Number(ev.toFixed(4)),
                 kelly: Number(kelly.toFixed(4)),
                 book: offered.book,
-                // V12 Audit
                 devig_applied: devigApplied,
                 p_market_source: devigApplied ? "fair_devig" : "implied_raw",
                 devig_skip_reason: devigSkipReason,
                 vector_complete: hasFullVector,
                 missing_legs: missingLegs,
                 margin_sum: marginSum ? Number(marginSum.toFixed(4)) : null,
+                lambda_source: meta.source,
+                is_mismatch: (qualityFlags.length > 0),
+                quality_flags: qualityFlags, // Pass to Ranker
+                alpha_score: 0
             });
         }
     }
@@ -463,58 +512,180 @@ function scanMarkets(matchRecord, modelMarkets, cornerMarkets, config) {
   return results;
 }
 
-// --- 6. Ranking & Portfolio ---
+// --- 6. Ranking & Portfolio (V13.4 Pro Selection) ---
+
+function calculateFinalScore(pick, meta, config) {
+    const wEV = config.rank_w_ev || 0.6;
+    const wProb = config.rank_w_prob || 1.0;
+    const wConf = config.rank_w_conf || 0.4;
+    const evCap = config.rank_ev_cap || 0.75;
+
+    const evEff = Math.min(Math.max(pick.ev, 0), evCap);
+
+    const alphaScore = (evEff * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
+    const alphaRaw = (Math.max(pick.ev, 0) * 100 * wEV) + (pick.p_model * 100 * wProb) + (pick.confidence_score * wConf);
+
+    let finalScore = alphaScore;
+
+    // Merge Scanner flags + Scoring flags
+    const qualityFlags = [...(pick.quality_flags || [])];
+
+    // Penalties
+    if (!pick.vector_complete || pick.missing_legs > 0) {
+        finalScore -= 40;
+        qualityFlags.push("incomplete_vector");
+    }
+
+    if (!pick.devig_applied) {
+        if (pick.devig_skip_reason === 'not_exclusive') {
+            finalScore -= 5;
+            qualityFlags.push("non_exclusive_market");
+        } else {
+            finalScore -= 15;
+            qualityFlags.push("no_devig");
+        }
+    }
+
+    if (pick.devig_skip_reason !== 'not_exclusive' && pick.margin_sum && pick.margin_sum > 1.10) {
+        const pen = (pick.margin_sum - 1.10) * 100;
+        finalScore -= Math.min(pen, 30);
+        qualityFlags.push("high_margin");
+    }
+
+    if (pick.odds > 6.0) {
+        const pen = (pick.odds - 6.0) * 3;
+        finalScore -= Math.min(pen, 30);
+        qualityFlags.push("odds_tail");
+    }
+
+    // Mismatch Penalty (Flagged in Scan)
+    if (pick.is_mismatch) {
+        finalScore -= 25;
+        // Flag already in quality_flags from scan
+    }
+
+    return {
+        score: Number(finalScore.toFixed(2)),
+        alpha_score: Number(alphaScore.toFixed(2)),
+        alpha_raw: Number(alphaRaw.toFixed(2)),
+        flags: [...new Set(qualityFlags)] // Dedupe
+    };
+}
+
+function selectPortfolio(candidates, config) {
+    const portfolio = [];
+    const seenFamilies = new Set();
+    const timeframeCounts = { ft: 0, ht: 0, "2h": 0 };
+
+    const passes = [
+        { maxFam: 1, maxTF: 2, strictCluster: true },
+        { maxFam: 2, maxTF: 2, strictCluster: false },
+        { maxFam: 3, maxTF: 3, strictCluster: false }
+    ];
+
+    let currentPass = 0;
+
+    while (portfolio.length < 5 && currentPass < passes.length) {
+        const rules = passes[currentPass];
+
+        for (const pick of candidates) {
+            if (portfolio.includes(pick)) continue;
+            if (portfolio.length >= 5) break;
+
+            const fam = pick.market_family;
+            const tf = pick.timeframe;
+            let excludedReason = null;
+
+            const famCount = portfolio.filter(p => p.market_family === fam).length;
+            if (famCount >= rules.maxFam) excludedReason = "max_family_limit";
+
+            const tfCount = timeframeCounts[tf] || 0;
+            if (!excludedReason && tfCount >= rules.maxTF) excludedReason = "max_timeframe_limit";
+
+            if (!excludedReason) {
+                if (fam === 'goals_ou' || fam === 'goals_btts') {
+                    const collision = portfolio.some(p => (p.market_family === 'goals_ou' || p.market_family === 'goals_btts') && p.timeframe === tf);
+                    if (collision) excludedReason = "cluster_goals_collision";
+                }
+
+                if (fam === 'combo_wtn') {
+                    const resultCollision = portfolio.some(p => (p.market_family === 'result_1x2' || p.market_family === 'result_dc') && p.timeframe === tf);
+                    if (resultCollision) excludedReason = "cluster_result_collision";
+                }
+            }
+
+            if (!excludedReason) {
+                portfolio.push(pick);
+                seenFamilies.add(fam);
+                if (timeframeCounts[tf] !== undefined) timeframeCounts[tf]++;
+                pick.selection_pass = currentPass + 1;
+            } else {
+                if (!pick.excluded_reason && currentPass === 0) pick.excluded_reason = excludedReason;
+            }
+        }
+        currentPass++;
+    }
+
+    return portfolio;
+}
 
 function rankAndFilterPicks(picks, meta, config) {
-  const wEV = config.rank_w_ev !== undefined ? config.rank_w_ev : 0.6;
-  const wConf = config.rank_w_conf !== undefined ? config.rank_w_conf : 0.4;
-
   const scored = picks.map(p => {
-    const confScore = calculateConfidenceScore(p, meta);
-    const tier = getConfidenceTier(confScore);
-    
-    // Sort Score (V12 Configurable)
-    const sortScore = (p.ev * 100) * wEV + (confScore * wConf);
+      const confScore = calculateConfidenceScore(p, meta);
+      const tier = getConfidenceTier(confScore);
+      const pWithConf = { ...p, confidence_score: confScore, confidence_tier: tier };
 
-    return { 
-        ...p, 
-        confidence_score: confScore, 
-        confidence_tier: tier,
-        sort_score: Number(sortScore.toFixed(2))
-    };
-  }).sort((a, b) => b.sort_score - a.sort_score);
+      const { score, alpha_score, alpha_raw, flags } = calculateFinalScore(pWithConf, meta, config);
 
-  const categorySeen = new Set();
-  const topPicks = [];
-  const others = [];
+      const lineStr = p.line !== undefined ? `_${p.line}` : '';
+      const stableId = `${p.match_id}|${p.market_family}|${p.timeframe}|${p.market}|${p.selection}${lineStr}`;
 
-  for (const p of scored) {
-      if (!categorySeen.has(p.category)) {
-          categorySeen.add(p.category);
-          topPicks.push(p);
-      } else {
-          others.push(p);
-      }
-      if (topPicks.length >= 5) break; 
-  }
-  
-  if (topPicks.length < 5) {
-      for (const p of others) {
-          if (topPicks.length >= 5) break;
-          topPicks.push(p);
-      }
-  }
+      return {
+          ...pWithConf,
+          id: stableId,
+          final_score: score,
+          alpha_score: alpha_score,
+          alpha_raw: alpha_raw,
+          quality_flags: flags,
+          sort_score: score,
+          ev_raw: p.ev
+      };
+  });
 
-  return { all: scored, top: topPicks };
+  scored.sort((a, b) => b.final_score - a.final_score);
+
+  // V13.4: Hard Filter for Mismatch (Optional)
+  const excludeMismatch = config.exclude_mismatch || false; // Default off, or true? User said "optionally".
+
+  const playableCandidates = scored.filter(p => {
+      if (p.odds <= 1.01) return false;
+      if (p.quality_flags.includes("incomplete_vector")) return false;
+
+      if (excludeMismatch && p.is_mismatch) return false;
+
+      return true;
+  });
+
+  const topPicks = selectPortfolio(playableCandidates, config);
+
+  const topIds = new Set(topPicks.map(p => p.id));
+
+  const watchlist = scored
+      .filter(p => !topIds.has(p.id) && p.alpha_score > 80)
+      .slice(0, 5);
+
+  return {
+      top: topPicks,
+      all: scored,
+      watchlist
+  };
 }
 
 // --- 7. Sanity Check (V12) ---
 function runSanityChecks(markets, probs, warnings) {
-    // 1X2 Sum
     const sum1X2 = markets.ft_1x2.home + markets.ft_1x2.draw + markets.ft_1x2.away;
     if (Math.abs(sum1X2 - 1) > 0.001) warnings.push(`sanity_1x2_sum_drift_${sum1X2.toFixed(4)}`);
 
-    // BTTS Sum
     const sumBTTS = markets.ft_btts.yes + markets.ft_btts.no;
     if (Math.abs(sumBTTS - 1) > 0.001) warnings.push(`sanity_btts_sum_drift_${sumBTTS.toFixed(4)}`);
 }
@@ -524,7 +695,7 @@ function runSanityChecks(markets, probs, warnings) {
 
 function runEngine(inputs, config = {}) {
   const match = inputs.match || inputs;
-  
+
   const { lambdaHome, lambdaAway, cornerLambdaHome, cornerLambdaAway, source, warnings } = estimateLambdas(match);
 
   const split1H = config.split_1h || 0.45;
@@ -540,22 +711,23 @@ function runEngine(inputs, config = {}) {
   const markets2H = deriveMarketsFromMatrix(matrix2H, "2h");
   const marketsCorners = deriveCornerMarkets(matrixCorners);
 
-  // V12: Sanity Check
   runSanityChecks(marketsFT, null, warnings);
 
   const allModelMarkets = { ...marketsFT, ...marketsHT, ...markets2H };
 
   const rawPicks = scanMarkets(match, allModelMarkets, marketsCorners, config);
+  rawPicks.forEach(p => p.lambda_source = source);
+
   const ranked = rankAndFilterPicks(rawPicks, { source, warnings }, config);
 
   return {
     match_id: match.match_id,
     overview: {
       teams: match.teams,
-      lambdas: { 
+      lambdas: {
           goals: { home: Number(lambdaHome.toFixed(2)), away: Number(lambdaAway.toFixed(2)) },
           corners: { home: Number(cornerLambdaHome.toFixed(2)), away: Number(cornerLambdaAway.toFixed(2)) },
-          source 
+          source
       },
       probs: {
         home_win: Number(marketsFT.ft_1x2.home.toFixed(4)),
@@ -566,6 +738,7 @@ function runEngine(inputs, config = {}) {
       engine_warnings: warnings
     },
     top_picks: ranked.top,
+    watchlist: ranked.watchlist,
     all_value_bets: ranked.all
   };
 }

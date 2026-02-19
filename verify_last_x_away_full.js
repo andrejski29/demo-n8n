@@ -40,7 +40,7 @@ if (code.includes('const side = input?.side ?? "away";')) {
 
 // 2. Check for full feature set inclusion (random sampling of deep keys)
 const requiredKeys = [
-    "xg_per_shot_overall", 
+    "xg_per_shot_overall",
     "p_over05_goals_overall",
     "corners_2h_vs_fh_ratio",
     "coverage_missing_keys"
