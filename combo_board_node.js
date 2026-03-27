@@ -1,11 +1,13 @@
 /**
- * Combo Board Node (v1.2 - Stability & Diversity Fixes)
+ * Combo Board Node (v1.3 Final - Hardening & Config Polish)
  * 
- * Changelog v1.2:
- * - Dedup: Fixed self-comparison bug; now uses Market Name tie-breaker.
- * - Diversity: Added explicit 'o/u' support to `deriveMarketFamily` for better classification.
- * - Validation: Enforced strict `YYYY-MM-DD` window format.
- * - Hygiene: Added safe type checks for `date_iso`.
+ * Changelog v1.3 Final:
+ * - Diagnostics: Split recursion pruning into 'pruned_too_high' and 'leaf_out_of_range'.
+ * - Market Family: Improved regex safety for 'Team Totals' (\btt\b). Hardened Corners/Cards detection.
+ * - Determinism: Added strictly deterministic tie-breaker chain (Market > Selection > Numeric Odds > Category > Date ISO > ID > Explicit Fingerprint).
+ * - Hygiene: Trimmed strings and smart numeric ID comparison.
+ * - Validation: Added strict array check for input.
+ * - Config: Documented recommended `max_ev` (e.g., 0.30). Added FR Market Filtering (Smart).
  */
 
 // ============================================================================
@@ -19,6 +21,7 @@ const CONFIG_MULTI = {
         min_confidence: 58,
         min_p_model: 0.44,
         min_ev: 0.00,
+        max_ev: null, // Optional cap (e.g., 0.30) to catch data errors or unrealistic EVs
     },
 
     // Diversity & Exposure
@@ -28,6 +31,15 @@ const CONFIG_MULTI = {
     diversity: {
         max_same_family: 2,
         same_family_penalty: 0.97
+    },
+
+    // Market Restriction Settings (e.g. for France)
+    market: {
+        country: 'FR', // Set to 'FR' to enable strict filtering, 'GLOBAL' to disable
+        ban_markets: {
+            corners: true,
+            cards: true
+        }
     },
 
     // Bucket Definitions
@@ -72,7 +84,11 @@ const CONFIG_MULTI = {
  * Main Entry Point
  */
 function generateComboBoard(allBets, windowStart, windowEnd) {
-    // 0. Strict Window Validation
+    // 0. Strict Validation
+    if (!Array.isArray(allBets)) {
+        return { error: "Input must be an array of bets." };
+    }
+
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     if (!windowStart || !windowEnd) {
         return { error: "Window Start and End dates are required (YYYY-MM-DD)." };
@@ -106,6 +122,7 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
 
     // Track used matches to prevent cross-bucket reuse
     const usedMatches = new Set();
+    const allowReuse = CONFIG_MULTI.reuse.allow_cross_bucket_reuse === true;
 
     // 4. Generate Buckets sequentially
     const buckets = ['safe', 'balanced', 'booster'];
@@ -113,21 +130,46 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
     buckets.forEach(type => {
         const config = CONFIG_MULTI.buckets[type];
         
+        // Detailed Filtering Diagnostics
+        const rejectionStats = {
+            total_candidates: 0,
+            passed: 0,
+            rejected: {
+                used: 0,
+                odds: 0,
+                p_model: 0,
+                confidence: 0,
+                ev: 0
+            }
+        };
+
         // Filter pool specifically for this bucket's strict criteria
-        const bucketCandidates = globalPool.filter(b => 
-            !usedMatches.has(b.match_id) && // Not used in previous buckets
-            b.odds >= config.leg_odds.min &&
-            b.odds <= config.leg_odds.max &&
-            b.p_model >= config.p_model_min &&
-            b.confidence_score >= config.confidence_min &&
-            b.ev >= config.ev_min
-        ).slice(0, config.max_pool_considered); // Optimization cap
+        const bucketCandidates = globalPool.filter(b => {
+            rejectionStats.total_candidates++;
+
+            if (!allowReuse && usedMatches.has(b.match_id)) { rejectionStats.rejected.used++; return false; }
+            if (b.odds < config.leg_odds.min || b.odds > config.leg_odds.max) { rejectionStats.rejected.odds++; return false; }
+            if (b.p_model < config.p_model_min) { rejectionStats.rejected.p_model++; return false; }
+            if (b.confidence_score < config.confidence_min) { rejectionStats.rejected.confidence++; return false; }
+            if (b.ev < config.ev_min) { rejectionStats.rejected.ev++; return false; }
+
+            rejectionStats.passed++;
+            return true;
+        }).slice(0, config.max_pool_considered); // Optimization cap
 
         let bestCombo = null;
+        let searchStatsTotal = { pruned_too_high: 0, leaf_out_of_range: 0, rejected_diversity: 0, valid_found: 0 };
 
         // Try allowed leg counts (smallest first usually)
         for (const legCount of config.legs_allowed) {
-            const combo = findBestCombo(bucketCandidates, legCount, config);
+            const { combo, stats } = findBestCombo(bucketCandidates, legCount, config);
+
+            // Aggregate stats
+            searchStatsTotal.pruned_too_high += stats.pruned_too_high;
+            searchStatsTotal.leaf_out_of_range += stats.leaf_out_of_range;
+            searchStatsTotal.rejected_diversity += stats.rejected_diversity;
+            searchStatsTotal.valid_found += stats.valid_found;
+
             if (combo) {
                 if (!bestCombo || combo.score > bestCombo.score) {
                     bestCombo = combo;
@@ -143,10 +185,23 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
                 // score removed for clean output
             };
             
-            // Mark used
-            bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
+            // Mark used (only if strict isolation is enforced, or just for tracking)
+            // Optimization: Skip adding if reuse is allowed.
+            if (!allowReuse) {
+                bestCombo.legs.forEach(l => usedMatches.add(l.match_id));
+            }
         } else {
-            result.debug.push(`No ${type} combo found (Pool: ${bucketCandidates.length})`);
+            // Enhanced Debug Output for Failures
+            result.debug.push({
+                bucket: type,
+                reason: "No combo found",
+                pool_stats: {
+                    total_available: globalPool.length,
+                    bucket_candidates: bucketCandidates.length,
+                    rejections: rejectionStats.rejected
+                },
+                search_stats: searchStatsTotal
+            });
         }
     });
 
@@ -157,10 +212,45 @@ function generateComboBoard(allBets, windowStart, windowEnd) {
 // LOGIC HELPERS
 // ============================================================================
 
+function isBannedForFR(bet) {
+    if (CONFIG_MULTI.market.country !== 'FR') return false;
+
+    // 1. Check Derived Family (Most Reliable)
+    if (bet.market_family) {
+        if (CONFIG_MULTI.market.ban_markets.corners && bet.market_family === 'corners_ou') return true;
+        if (CONFIG_MULTI.market.ban_markets.cards && bet.market_family === 'cards_total') return true;
+    }
+
+    // 2. Fallback Text Check (If family ambiguous or missing)
+    const m = (bet.market || "").toLowerCase().trim();
+    const c = (bet.category || "").toLowerCase().trim();
+    const s = (bet.selection || bet.runner || "").toLowerCase().trim();
+
+    const textToCheck = [m, c, s];
+
+    const RE_CORNERS = /\bcorner(s)?\b/i;
+    // Matches "card", "cards", "booking", "bookings", "booked"
+    // "book" is removed to ensure "bookmaker" false positives are impossible even if regex boundary fails
+    const RE_CARDS = /\b(card|cards|booking|bookings|booked)\b/i;
+
+    if (CONFIG_MULTI.market.ban_markets.corners) {
+        if (textToCheck.some(t => RE_CORNERS.test(t))) return true;
+    }
+
+    if (CONFIG_MULTI.market.ban_markets.cards) {
+        if (textToCheck.some(t => RE_CARDS.test(t))) return true;
+    }
+
+    return false;
+}
+
 function filterAndSanitize(bets, startStr, endStr) {
     return bets.map(sanitizeBet).filter(b => {
         if (!b) return false;
         
+        // FR Market Ban
+        if (isBannedForFR(b)) return false;
+
         // Date Check
         // Ensure string and length >= 10
         if (typeof b.date_iso !== 'string' || b.date_iso.length < 10) return false;
@@ -174,6 +264,9 @@ function filterAndSanitize(bets, startStr, endStr) {
         if (b.confidence_score < CONFIG_MULTI.pool.min_confidence) return false;
         if (b.ev < CONFIG_MULTI.pool.min_ev) return false;
 
+        // Optional Max EV Check
+        if (CONFIG_MULTI.pool.max_ev !== null && b.ev > CONFIG_MULTI.pool.max_ev) return false;
+
         return true;
     });
 }
@@ -185,7 +278,8 @@ function deduplicateBets(bets) {
         if (!existing) {
             best[b.match_id] = b;
         } else {
-            // Tie-breaker: P > Conf > Sort > EV > Market Name (Lexical)
+            // Tie-breaker: P > Conf > Sort > EV > Market Name > Selection > Odds (Numeric) > Category > Date ISO > ID > Fingerprint (Strict Determinism)
+            // NOTE: For String comparisons, "Lexicographically Larger" wins (e.g. "B" > "A").
             if (b.p_model > existing.p_model) best[b.match_id] = b;
             else if (b.p_model === existing.p_model) {
                 if (b.confidence_score > existing.confidence_score) best[b.match_id] = b;
@@ -194,10 +288,70 @@ function deduplicateBets(bets) {
                     else if (b.sort_score === existing.sort_score) {
                         if (b.ev > existing.ev) best[b.match_id] = b;
                         else if (b.ev === existing.ev) {
-                            // Lexical Compare on Market Name
-                            const bm = String(b.market || "");
-                            const em = String(existing.market || "");
-                            if (bm > em) best[b.match_id] = b; 
+                            // Lexical Compare on Market Name (Trimmed)
+                            const bm = String(b.market || "").trim();
+                            const em = String(existing.market || "").trim();
+                            if (bm > em) best[b.match_id] = b;
+                            else if (bm === em) {
+                                // Selection Name (Lexical, Trimmed)
+                                const bs = String(b.selection || b.runner || "").trim();
+                                const es = String(existing.selection || existing.runner || "").trim();
+                                if (bs > es) best[b.match_id] = b;
+                                else if (bs === es) {
+                                    // Odds (Numeric - Higher is preferred)
+                                    if (b.odds > existing.odds) best[b.match_id] = b;
+                                    else if (b.odds === existing.odds) {
+                                        // Category (Lexical, Trimmed)
+                                        const bc = String(b.category || "").trim();
+                                        const ec = String(existing.category || "").trim();
+                                        if (bc > ec) best[b.match_id] = b;
+                                        else if (bc === ec) {
+                                            // Date ISO (Lexical, Trimmed)
+                                            const bd = String(b.date_iso || "").trim();
+                                            const ed = String(existing.date_iso || "").trim();
+                                            if (bd > ed) best[b.match_id] = b;
+                                            else if (bd === ed) {
+                                                // ID (Smart Numeric or Lexical) - trimmed + safe numeric compare
+                                                const bidStr = String(b.id || b.bet_id || "").trim();
+                                                const eidStr = String(existing.id || existing.bet_id || "").trim();
+
+                                                const bidNum = bidStr !== "" ? Number(bidStr) : NaN;
+                                                const eidNum = eidStr !== "" ? Number(eidStr) : NaN;
+
+                                                const bidIsNum = Number.isFinite(bidNum);
+                                                const eidIsNum = Number.isFinite(eidNum);
+
+                                                let idWin = false;
+                                                let idEqual = false;
+
+                                                if (bidIsNum && eidIsNum) {
+                                                    if (bidNum > eidNum) idWin = true;
+                                                    else if (bidNum === eidNum) idEqual = true;
+                                                } else {
+                                                    if (bidStr > eidStr) idWin = true;
+                                                    else if (bidStr === eidStr) idEqual = true;
+                                                }
+
+                                                if (idWin) {
+                                                    best[b.match_id] = b;
+                                                } else if (idEqual) {
+                                                    // Ultimate Explicit Fingerprint (Airtight)
+                                                    const bSrc = String(b.bookmaker || b.source || "").trim();
+                                                    const eSrc = String(existing.bookmaker || existing.source || "").trim();
+
+                                                    const bO = Number.isFinite(b.odds) ? b.odds : 0;
+                                                    const eO = Number.isFinite(existing.odds) ? existing.odds : 0;
+
+                                                    const bFp = `${bm}|${bs}|${bO.toFixed(3)}|${bc}|${bd}|${bidStr}|${bSrc}`;
+                                                    const eFp = `${em}|${es}|${eO.toFixed(3)}|${ec}|${ed}|${eidStr}|${eSrc}`;
+
+                                                    if (bFp > eFp) best[b.match_id] = b;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -221,6 +375,7 @@ function sanitizeBet(bet) {
     clean.ev = parseFloat(bet.ev) || 0;
     
     // Market Family Fallback
+    // Ensure family is set before downstream checks
     if (!clean.market_family || clean.market_family === 'unknown') {
         clean.market_family = deriveMarketFamily(clean);
     }
@@ -232,15 +387,38 @@ function deriveMarketFamily(bet) {
     const m = (bet.market || "").toLowerCase();
     const c = (bet.category || "").toLowerCase();
 
-    // Priority Classification
-    if (m.includes('corner') || c.includes('corner')) return 'corners_ou';
-    if (m.includes('card') || c.includes('card') || c.includes('book')) return 'cards_total';
+    // Safe Regexes for Family Classification
+    const RE_CORNERS = /\bcorner(s)?\b/i;
+    const RE_CARDS = /\b(card|cards|booking|bookings|booked)\b/i; // No 'book' alone
+
+    // 1. Explicit Family Mappings (Priority)
+    if (RE_CORNERS.test(m) || RE_CORNERS.test(c)) return 'corners_ou';
+    if (RE_CARDS.test(m) || RE_CARDS.test(c)) return 'cards_total';
+
     if (m.includes('btts') || m.includes('both teams')) return 'goals_btts';
     if (m.includes('clean sheet')) return 'defense_cs';
-    if (m.includes('1x2') || m.includes('winner')) return 'result_1x2';
     
-    // O/U Classification (Includes 'O/U', 'Over', 'Under')
-    if (m.includes('o/u') || m.includes('over/under') || m.includes('over') || m.includes('under')) return 'goals_ou';
+    // 1X2 Safety: Ensure not capturing 'Double Chance' via substring
+    if ((m.includes('1x2') || m.includes('winner') || m.includes('match result')) && !m.includes('double chance')) return 'result_1x2';
+
+    // 2. Asian Handicap & Draw No Bet
+    // Split DNB to its own family for diversity
+    if (m.includes('dnb') || m.includes('draw no bet')) return 'result_dnb';
+    if (m.includes('asian') || m.includes('handicap') || /\bah\b/.test(m)) return 'goals_ah';
+
+    // 3. Double Chance (Safer Regex Boundary Check)
+    // Matches "Double Chance", "DC " (start), " DC" (end), or strict "1X"/"X2" words
+    if (m.includes('double chance') || /\bdc\b/.test(m) || /\b1x\b/.test(m) || /\bx2\b/.test(m)) return 'result_dc';
+
+    // 4. Team Totals (Safer Regex Boundary Check)
+    if (m.includes('team total') || m.includes('team over') || m.includes('team under') || /\btt\b/.test(m)) return 'goals_team';
+
+    // 5. Half Time / Full Time
+    if (m.includes('ht/ft') || m.includes('half time') || m.includes('1st half') || m.includes('2nd half')) return 'half_props';
+
+    // 6. General O/U Classification (Includes 'O/U', 'Over', 'Under')
+    // Put this last as a catch-all for generic totals
+    if (m.includes('o/u') || m.includes('over/under') || m.includes('over') || m.includes('under') || m.includes('goals')) return 'goals_ou';
     
     return 'default';
 }
@@ -262,10 +440,18 @@ function findBestCombo(pool, targetLegs, config) {
     const maxSameFamily = CONFIG_MULTI.diversity.max_same_family;
     const searchDepth = config.search_depth || 15;
 
+    const stats = {
+        pruned_too_high: 0,
+        leaf_out_of_range: 0,
+        rejected_diversity: 0,
+        valid_found: 0
+    };
+
     const search = (index, currentLegs, currentOdds, familyCounts) => {
         // Base Case: Full Combo
         if (currentLegs.length === targetLegs) {
             if (currentOdds >= config.total_odds.min && currentOdds <= config.total_odds.max) {
+                stats.valid_found++;
                 const score = calculateScore(currentLegs, currentOdds, config.weights);
                 if (!best || score > best.score) {
                     best = {
@@ -274,6 +460,8 @@ function findBestCombo(pool, targetLegs, config) {
                         score: score
                     };
                 }
+            } else {
+                stats.leaf_out_of_range++; // Leaf out of range (too low or too high)
             }
             return;
         }
@@ -286,12 +474,18 @@ function findBestCombo(pool, targetLegs, config) {
             const newOdds = currentOdds * leg.odds;
 
             // Pruning: Odds too high?
-            if (newOdds > config.total_odds.max) continue;
+            if (newOdds > config.total_odds.max) {
+                 stats.pruned_too_high++;
+                 continue;
+            }
 
             // Diversity Check
             const fam = leg.market_family || "unknown";
             const currentFamCount = familyCounts[fam] || 0;
-            if (currentFamCount >= maxSameFamily) continue;
+            if (currentFamCount >= maxSameFamily) {
+                stats.rejected_diversity++;
+                continue;
+            }
 
             // Recurse
             const nextFamilyCounts = { ...familyCounts, [fam]: currentFamCount + 1 };
@@ -300,7 +494,7 @@ function findBestCombo(pool, targetLegs, config) {
     };
 
     search(0, [], 1, {});
-    return best;
+    return { combo: best, stats };
 }
 
 function calculateScore(legs, totalOdds, weights) {
@@ -369,5 +563,5 @@ if (typeof items !== 'undefined' && Array.isArray(items)) {
 }
 
 if (typeof module !== 'undefined') {
-    module.exports = { generateComboBoard };
+    module.exports = { generateComboBoard, CONFIG_MULTI }; // Export Config for testing override
 }

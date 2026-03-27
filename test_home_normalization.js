@@ -4,8 +4,8 @@ const { normalizeHomeTeam } = require('./normalize_home_v2.js');
 try {
     const rawData = fs.readFileSync('./Home_Team.json', 'utf8');
     const n8nData = JSON.parse(rawData);
-    
-    let inputData = n8nData[0].data; 
+
+    let inputData = n8nData[0].data;
 
     const normalized = normalizeHomeTeam(inputData);
 

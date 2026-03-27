@@ -143,7 +143,7 @@ const addPctProbs = (out, srcObj, mappings, needFn) => {
 // ---- Coverage helper (data completeness signals) ----
 const coverageBlock = (stats, add, mpO, mpH, mpA) => {
   const cov = {};
-  
+
   // Use "S" (merged) logic inside helper? No, explicit props are safer here to know where data comes from.
   // But we can just use the provided stats/add.
 

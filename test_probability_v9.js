@@ -22,7 +22,7 @@ try {
     const uniqueCats = new Set(categories);
     console.log(`Categories: ${categories.join(', ')}`);
     console.log(`Unique: ${uniqueCats.size} / ${categories.length}`);
-    
+
     // Check Devig on Double Chance
     const dcBets = result.all_value_bets.filter(p => p.market === "Double Chance");
     if (dcBets.length > 0) {

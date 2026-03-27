@@ -1,5 +1,5 @@
 // -------------------------
-// n8n Node: Match Record Normalizer (Production-Safe V5.2)
+// n8n Node: Match Record Normalizer (Production-Safe V5.3)
 // -------------------------
 
 // --- 1. Input Extraction Helper ---
@@ -7,20 +7,24 @@ function getInput() {
   if (typeof item !== 'undefined' && item.json) return item.json;
   if (typeof items !== 'undefined' && items.length > 0 && items[0].json) return items[0].json;
   if (typeof $input !== 'undefined' && $input.item) return $input.item.json;
-  if (typeof data !== 'undefined') return data; 
+  if (typeof data !== 'undefined') return data;
   return {};
 }
 
-const inputData = getInput();
+const raw = getInput();
+
+// CRITICAL FIX: Defensive Input Check
+if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return [{ json: { error: "Invalid input format: Expected object", raw_type: typeof raw } }];
+}
 
 // --- 2. QA Structure & Versioning ---
-const QA_VERSION = "5.2"; // Bumped to force/track migration
+const QA_VERSION = "5.3";
 const now = new Date().toISOString();
 
-// Helper to init QA block
 function initQA(inputType) {
     return {
-        status: "ok", // ok | warning | soft_error
+        status: "ok",
         warnings: [],
         errors: [],
         meta: {
@@ -32,586 +36,403 @@ function initQA(inputType) {
         markets_merged: [],
         markets_from_flat_only: [],
         markets_from_comparison_only: [],
-        markets_skipped_invalid: 0
+        markets_skipped_invalid: 0,
+        provenance: { imputed_fields: [] }
     };
 }
 
-// --- 3. Data Unwrapping & Detection ---
-let raw;
-if (inputData.response && Array.isArray(inputData.response)) {
-  raw = inputData.response[0];
-} else if (inputData.data) {
-  raw = Array.isArray(inputData.data) ? inputData.data[0] : inputData.data;
-} else {
-  raw = inputData;
-}
+// CRITICAL FIX: ID Priority (match_id > id)
+const matchId = (raw.match_id !== undefined && raw.match_id !== null) ? raw.match_id : raw.id;
 
-// Check Input Type
-const isAlreadyNormalized = (raw && raw.match_id && raw.odds && raw.odds.best);
+// Check Input Type (V5 Signature OR Structural Detection for Partial Records)
+const isAlreadyNormalized = (raw.qa && raw.qa.meta && raw.qa.meta.normalizer_version) || (raw.match_id && raw.odds && raw.odds.best);
 const qa = initQA(isAlreadyNormalized ? "normalized" : "raw");
 
-// --- 4. Logic Branching: Passthrough & MIGRATION (V5.2) ---
+// --- Helper: Market Key Normalization ---
+function normalizeKey(key) {
+    let k = key.toLowerCase();
+
+    // Map sh_ / 2nd_half -> 2h_
+    if (k.startsWith("sh_")) k = k.replace("sh_", "2h_");
+    if (k.includes("2nd_half")) k = k.replace("2nd_half", "2h");
+
+    // Map DC keys to canonical
+    if (k === "dc_home_draw") return "dc_1x";
+    if (k === "dc_home_away") return "dc_12";
+    if (k === "dc_draw_away") return "dc_x2";
+    if (k === "dc_away_home") return "dc_12";
+
+    // Map HT BTTS
+    if (k === "btts_1st_half_yes" || k === "btts_1h_yes") return "ht_btts_yes";
+    if (k === "btts_1st_half_no" || k === "btts_1h_no") return "ht_btts_no";
+
+    // Map 2H BTTS
+    if (k === "btts_2nd_half_yes" || k === "btts_2h_yes") return "2h_btts_yes";
+    if (k === "btts_2nd_half_no" || k === "btts_2h_no") return "2h_btts_no";
+
+    return k;
+}
+
+// --- 3. Logic Branching: Passthrough & MIGRATION ---
 if (isAlreadyNormalized) {
-    qa.status = "warning"; 
+    qa.status = "warning";
     qa.warnings.push("input_already_normalized");
 
-    // Preserve existing QA info if present
-    if (raw.qa && raw.qa.warnings) {
-        qa.warnings.push(...raw.qa.warnings);
+    // Preserve existing QA info
+    if (raw.qa) {
+        if (raw.qa.warnings) qa.warnings.push(...raw.qa.warnings);
+        if (raw.qa.provenance && Array.isArray(raw.qa.provenance.imputed_fields)) {
+            qa.provenance.imputed_fields.push(...raw.qa.provenance.imputed_fields);
+        }
     }
 
-    // --- SCHEMA MIGRATION LOGIC ---
     let migrated = false;
 
-    // 1. Meta: roundID -> round_id
-    if (raw.meta && raw.meta.roundID !== undefined && raw.meta.round_id === undefined) {
-        raw.meta.round_id = raw.meta.roundID;
-        delete raw.meta.roundID;
-        migrated = true;
+    // A. Schema Migration: Ensure Signals in Context
+    if (!raw.context) raw.context = {};
+
+    // CRITICAL FIX: Ensure signals structure exists inside context
+    if (!raw.context.signals) {
+        if (raw.signals) {
+            raw.context.signals = raw.signals;
+        } else {
+            // Reconstruct signals from context if possible, or init empty
+            raw.context.signals = {
+                ppg: {
+                    home: raw.context.home_ppg || 0,
+                    away: raw.context.away_ppg || 0
+                },
+                xg: {
+                    home: raw.context.team_a_xg_prematch || 0,
+                    away: raw.context.team_b_xg_prematch || 0,
+                    total: raw.context.total_xg_prematch || 0
+                }
+            };
+        }
     }
 
-    // 2. Root: h2h_norm -> h2h
-    if (raw.h2h_norm && !raw.h2h) {
-        raw.h2h = raw.h2h_norm;
-        delete raw.h2h_norm;
-        migrated = true;
-    }
-
-    // 3. Context: Merge Signals if missing
-    if (raw.signals && raw.context) {
+    // Check for specific imputed fields in context root (legacy support)
+    // If raw.signals exists, ensure it syncs to context root
+    if (raw.signals) {
         if (raw.signals.ppg && raw.context.home_ppg === undefined) {
             raw.context.home_ppg = raw.signals.ppg.home;
             raw.context.away_ppg = raw.signals.ppg.away;
+            qa.provenance.imputed_fields.push('home_ppg', 'away_ppg');
             migrated = true;
         }
         if (raw.signals.xg && raw.context.team_a_xg_prematch === undefined) {
             raw.context.team_a_xg_prematch = raw.signals.xg.home;
             raw.context.team_b_xg_prematch = raw.signals.xg.away;
             raw.context.total_xg_prematch = raw.signals.xg.total;
+            qa.provenance.imputed_fields.push('team_a_xg_prematch', 'team_b_xg_prematch');
             migrated = true;
         }
     }
 
-    // 4. Odds Keys Migration
+    // B. Key Normalization & Corner Expansion
     if (raw.odds && raw.odds.best) {
         const newBest = {};
-        let oddsChanged = false;
-
         Object.keys(raw.odds.best).forEach(key => {
-            let newKey = key;
-            
-            // Map sh_ -> 2h_
-            if (key.startsWith("sh_")) newKey = key.replace("sh_", "2h_");
-            
-            // Map dc keys (legacy -> canonical)
-            if (key === "dc_home_draw") newKey = "dc_1x";
-            if (key === "dc_home_away") newKey = "dc_12";
-            if (key === "dc_draw_away") newKey = "dc_x2";
+            const canonical = normalizeKey(key);
+            newBest[canonical] = raw.odds.best[key];
 
-            // Map BTTS halves
-            if (key === "btts_1h_yes") newKey = "ht_btts_yes";
-            if (key === "btts_1h_no") newKey = "ht_btts_no";
-            if (key === "btts_2h_yes") newKey = "2h_btts_yes";
-            if (key === "btts_2h_no") newKey = "2h_btts_no";
-
-            // Add to new map
-            newBest[newKey] = raw.odds.best[key];
-            if (newKey !== key) oddsChanged = true;
-
-            // Corner Expansion (ensure new keys exist if legacy exist)
-            const cornerMatch = newKey.match(/^corners_over_([\d.]+)$/);
+            // CRITICAL FIX: Backfill New Corner Keys if Legacy exists
+            // Legacy: corners_over_X.5 -> New: corners_ou_over_X.5
+            const cornerMatch = canonical.match(/^corners_(over|under)_([\d.]+)$/);
             if (cornerMatch) {
-                const line = cornerMatch[1];
-                const newCornerKey = `corners_ou_over_${line}`;
-                if (!newBest[newCornerKey]) {
-                    newBest[newCornerKey] = raw.odds.best[key]; // Clone
-                    oddsChanged = true;
-                }
+                const [_, side, line] = cornerMatch;
+                const newKey = `corners_ou_${side}_${line}`;
+                if (!newBest[newKey]) newBest[newKey] = raw.odds.best[key];
             }
-            const cornerMatchUnder = newKey.match(/^corners_under_([\d.]+)$/);
-            if (cornerMatchUnder) {
-                const line = cornerMatchUnder[1];
-                const newCornerKey = `corners_ou_under_${line}`;
-                if (!newBest[newCornerKey]) {
-                    newBest[newCornerKey] = raw.odds.best[key]; // Clone
-                    oddsChanged = true;
-                }
+
+            // Backfill Legacy if New exists
+            const cornerOuMatch = canonical.match(/^corners_ou_(over|under)_([\d.]+)$/);
+            if (cornerOuMatch) {
+                const [_, side, line] = cornerOuMatch;
+                const legacyKey = `corners_${side}_${line}`;
+                if (!newBest[legacyKey]) newBest[legacyKey] = raw.odds.best[key];
             }
         });
 
-        if (oddsChanged) {
-            raw.odds.best = newBest;
-            raw.odds.groups = generateGroups(newBest); // Regenerate groups for new keys
-            migrated = true;
-        }
+        // Check for missing canonical keys from specific legacy aliases
+        // e.g. dc_home_draw might have been missed if loop used keys directly
+        // The loop above uses normalizeKey, so it handles it.
+
+        raw.odds.best = newBest;
+        migrated = true;
     }
 
-    if (migrated) qa.warnings.push("schema_migrated_v5.2");
+    if (migrated) qa.warnings.push("schema_migrated_v5.3");
 
-    // Assign new QA block
+    // Dedupe provenance
+    qa.provenance.imputed_fields = [...new Set(qa.provenance.imputed_fields)];
     raw.qa = qa;
 
     return [{ json: raw }];
 }
 
-// --- 5. Logic Branching: Raw Input (Normalize) ---
-
-// Guard: Missing ID
-if (!raw || (!raw.id && !raw.match_id)) {
-   qa.status = "soft_error";
-   qa.errors.push("missing_id");
-   return [{ json: { error: "No valid match ID found", qa } }];
-}
-
-// Canonical ID (Fix: prioritize match_id)
-const matchId = raw.match_id || raw.id;
-
-// --- 6. Helpers & Config ---
+// --- 4. FULL NORMALIZATION (Raw Input) ---
 
 function isValidOdds(val) {
   if (val === undefined || val === null || val === "") return false;
   const n = Number(val);
-  return Number.isFinite(n) && n > 1.0; 
+  return Number.isFinite(n) && n > 1.0;
 }
 
-function normalizePercent(val) {
-  if (val === undefined || val === null) return null;
-  const n = Number(val);
-  if (!Number.isFinite(n)) return null;
-  if (n > 1) return Number((n / 100).toFixed(4)); 
-  return Number(n.toFixed(4));
-}
-
-// Group Generator (Shared)
-function generateGroups(bestOdds) {
-    const groups = {
-        "ft_1x2": ["ft_1x2_home", "ft_1x2_draw", "ft_1x2_away"],
-        "ht_1x2": ["ht_1x2_home", "ht_1x2_draw", "ht_1x2_away"],
-        "2h_1x2": ["2h_1x2_home", "2h_1x2_draw", "2h_1x2_away"],
-        "dc": ["dc_1x", "dc_12", "dc_x2"],
-        "btts": ["btts_yes", "btts_no"],
-        "ht_btts": ["ht_btts_yes", "ht_btts_no"],
-        "2h_btts": ["2h_btts_yes", "2h_btts_no"],
-        "dnb": ["dnb_home", "dnb_away"],
-        "cs_home": ["cs_home_yes", "cs_home_no"],
-        "cs_away": ["cs_away_yes", "cs_away_no"],
-        "corners_1x2": ["corners_1x2_home", "corners_1x2_draw", "corners_1x2_away"]
-    };
-
-    const keys = Object.keys(bestOdds);
-    keys.forEach(key => {
-        const goalMatch = key.match(/^(ft|ht|2h)_goals_(over|under)_([\d.]+)$/);
-        if (goalMatch) {
-            const [_, period, type, line] = goalMatch;
-            const groupKey = `${period}_goals_${line}`;
-            if (!groups[groupKey]) groups[groupKey] = [];
-            groups[groupKey].push(key);
-        }
-        
-        // New Corner Keys
-        const cornerMatch = key.match(/^corners_ou_(over|under)_([\d.]+)$/);
-        if (cornerMatch) {
-            const [_, type, line] = cornerMatch;
-            const groupKey = `corners_ou_${line}`;
-            if (!groups[groupKey]) groups[groupKey] = [];
-            groups[groupKey].push(key);
-        }
-        
-        // Legacy Corner Keys (Support Alias)
-        const legacyMatch = key.match(/^corners_(over|under)_([\d.]+)$/);
-        if (legacyMatch) {
-             const [_, type, line] = legacyMatch;
-             // Map legacy keys to NEW groups so devigging works
-             const groupKey = `corners_ou_${line}`;
-             if (!groups[groupKey]) groups[groupKey] = [];
-             groups[groupKey].push(key);
-        }
-    });
-
-    return groups;
-}
-
-// Flat Mappings
-const FLAT_ODDS_MAP = {
-  "odds_ft_1": "ft_1x2_home",
-  "odds_ft_x": "ft_1x2_draw",
-  "odds_ft_2": "ft_1x2_away",
-  "odds_ft_over05": "ft_goals_over_0.5",
-  "odds_ft_under05": "ft_goals_under_0.5",
-  "odds_ft_over15": "ft_goals_over_1.5",
-  "odds_ft_under15": "ft_goals_under_1.5",
-  "odds_ft_over25": "ft_goals_over_2.5",
-  "odds_ft_under25": "ft_goals_under_2.5",
-  "odds_ft_over35": "ft_goals_over_3.5",
-  "odds_ft_under35": "ft_goals_under_3.5",
-  "odds_ft_over45": "ft_goals_over_4.5",
-  "odds_ft_under45": "ft_goals_under_4.5",
-  "odds_btts_yes": "btts_yes",
-  "odds_btts_no": "btts_no",
-  "odds_doublechance_1x": "dc_1x",
-  "odds_doublechance_12": "dc_12",
-  "odds_doublechance_x2": "dc_x2",
-  "odds_dnb_1": "dnb_home",
-  "odds_dnb_2": "dnb_away",
-  "odds_1st_half_result_1": "ht_1x2_home",
-  "odds_1st_half_result_x": "ht_1x2_draw",
-  "odds_1st_half_result_2": "ht_1x2_away",
-  "odds_1st_half_over05": "ht_goals_over_0.5",
-  "odds_1st_half_under05": "ht_goals_under_0.5",
-  "odds_1st_half_over15": "ht_goals_over_1.5",
-  "odds_1st_half_under15": "ht_goals_under_1.5",
-  "odds_1st_half_over25": "ht_goals_over_2.5",
-  "odds_1st_half_under25": "ht_goals_under_2.5",
-  "odds_1st_half_over35": "ht_goals_over_3.5",
-  "odds_1st_half_under35": "ht_goals_under_3.5",
-  "odds_2nd_half_result_1": "2h_1x2_home",
-  "odds_2nd_half_result_x": "2h_1x2_draw",
-  "odds_2nd_half_result_2": "2h_1x2_away",
-  "odds_2nd_half_over05": "2h_goals_over_0.5",
-  "odds_2nd_half_under05": "2h_goals_under_0.5",
-  "odds_2nd_half_over15": "2h_goals_over_1.5",
-  "odds_2nd_half_under15": "2h_goals_under_1.5",
-  "odds_2nd_half_over25": "2h_goals_over_2.5",
-  "odds_2nd_half_under25": "2h_goals_under_2.5",
-  "odds_2nd_half_over35": "2h_goals_over_3.5",
-  "odds_2nd_half_under35": "2h_goals_under_3.5",
-  "odds_btts_1st_half_yes": "ht_btts_yes",
-  "odds_btts_1st_half_no": "ht_btts_no",
-  "odds_btts_2nd_half_yes": "2h_btts_yes",
-  "odds_btts_2nd_half_no": "2h_btts_no",
-  "odds_team_to_score_first_1": "fgs_home",
-  "odds_team_to_score_first_x": "fgs_none",
-  "odds_team_to_score_first_2": "fgs_away",
-  "odds_win_to_nil_1": "win_to_nil_home",
-  "odds_win_to_nil_2": "win_to_nil_away",
-  "odds_team_a_cs_yes": "cs_home_yes",
-  "odds_team_a_cs_no": "cs_home_no",
-  "odds_team_b_cs_yes": "cs_away_yes",
-  "odds_team_b_cs_no": "cs_away_no",
-  "odds_corners_1": "corners_1x2_home",
-  "odds_corners_x": "corners_1x2_draw",
-  "odds_corners_2": "corners_1x2_away",
-};
-
-// Regex Mappings (New + Legacy Support)
-const FLAT_REGEX_MAP = [
-  // New Standard
-  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_ou_over_${m[1]/10}` }, 
-  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_ou_under_${m[1]/10}` },
-  
-  // Legacy Alias (Generate duplicate key for compat, marked as legacy later)
-  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => `corners_over_${m[1]/10}`, isLegacy: true },
-  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => `corners_under_${m[1]/10}`, isLegacy: true },
-];
-
-function flatKeyToMarketKeys(flatKey) {
-  const results = [];
-  if (FLAT_ODDS_MAP[flatKey]) results.push({ key: FLAT_ODDS_MAP[flatKey], isLegacy: false });
-  
-  for (const r of FLAT_REGEX_MAP) {
-    const match = flatKey.match(r.pattern);
-    if (match) {
-        results.push({ key: r.map(match), isLegacy: r.isLegacy });
-    }
-  }
-  return results; // Returns array of keys to populate
-}
-
+// Helper: Comparison Odds Mapper
 function toMarketKeys(category, selection) {
-  const c = category.trim();
-  const s = selection.trim();
-  const sl = s.toLowerCase();
+  const cat = (category || "").toLowerCase();
+  const sel = (selection || "").toLowerCase();
   const keys = [];
-
-  // Helper to push
-  const add = (k) => keys.push({ key: k, isLegacy: false });
-  const addLegacy = (k) => keys.push({ key: k, isLegacy: true });
+  const add = (k) => keys.push(k);
 
   // 1X2
-  if (c === "FT Result") {
-    if (sl === "home") add("ft_1x2_home");
-    if (sl === "draw") add("ft_1x2_draw");
-    if (sl === "away") add("ft_1x2_away");
+  if (cat === "ft result" || cat === "match winner" || cat === "1x2") {
+    if (sel === "1" || sel === "home") add("ft_1x2_home");
+    else if (sel === "x" || sel === "draw") add("ft_1x2_draw");
+    else if (sel === "2" || sel === "away") add("ft_1x2_away");
   }
-  if (c === "Half Time Result") {
-    if (sl === "home") add("ht_1x2_home");
-    if (sl === "draw") add("ht_1x2_draw");
-    if (sl === "away") add("ht_1x2_away");
-  }
-  if (c === "Second Half Result") {
-    if (sl === "home") add("2h_1x2_home");
-    if (sl === "draw") add("2h_1x2_draw");
-    if (sl === "away") add("2h_1x2_away");
-  }
-
-  // Double Chance
-  if (c === "Double Chance") {
-    if (sl === "home/draw" || sl === "home/x") add("dc_1x");
-    if (sl === "home/away" || sl === "12") add("dc_12");
-    if (sl === "draw/away" || sl === "x/away") add("dc_x2");
-  }
-
-  // Draw No Bet
-  if (c === "Draw No Bet") {
-    if (sl === "home" || sl === "1") add("dnb_home");
-    if (sl === "away" || sl === "2") add("dnb_away");
-  }
-
-  // Goals
-  if (c === "Goals Over/Under" || c === "1st Half Goals" || c === "2nd Half Goals") {
-    let prefix = "ft_goals";
-    if (c === "1st Half Goals") prefix = "ht_goals";
-    if (c === "2nd Half Goals") prefix = "2h_goals";
-
-    if (sl.startsWith("over")) {
-      const line = sl.replace("over", "").trim();
-      add(`${prefix}_over_${line}`);
-    }
-    if (sl.startsWith("under")) {
-      const line = sl.replace("under", "").trim();
-      add(`${prefix}_under_${line}`);
-    }
-  }
-
   // BTTS
-  if (c === "Both Teams To Score") {
-    if (sl === "yes") add("btts_yes");
-    if (sl === "no") add("btts_no");
+  else if (cat === "both teams to score" || cat === "btts") {
+    if (sel === "yes") add("btts_yes");
+    else if (sel === "no") add("btts_no");
   }
-  if (c === "Both Teams to Score in 1st Half") {
-    if (sl === "yes") add("ht_btts_yes");
-    if (sl === "no") add("ht_btts_no");
+  // Double Chance
+  else if (cat === "double chance") {
+    if (sel === "1x" || sel === "home/draw") add("dc_1x");
+    else if (sel === "12" || sel === "home/away") add("dc_12");
+    else if (sel === "x2" || sel === "draw/away") add("dc_x2");
   }
-  if (c === "Both Teams to Score in 2nd Half") {
-    if (sl === "yes") add("2h_btts_yes");
-    if (sl === "no") add("2h_btts_no");
+  // HT 1X2
+  else if (cat.includes("half time result") || cat.includes("1st half result")) {
+      if (sel === "1" || sel === "home") add("ht_1x2_home");
+      else if (sel === "x" || sel === "draw") add("ht_1x2_draw");
+      else if (sel === "2" || sel === "away") add("ht_1x2_away");
   }
-
-  // Corners (New + Legacy)
-  if (c === "Corners") {
-    if (sl.startsWith("over")) {
-      const line = sl.replace("over", "").trim();
-      add(`corners_ou_over_${line}`);
-      addLegacy(`corners_over_${line}`);
-    }
-    if (sl.startsWith("under")) {
-      const line = sl.replace("under", "").trim();
-      add(`corners_ou_under_${line}`);
-      addLegacy(`corners_under_${line}`);
-    }
+  // 2H 1X2
+  else if (cat.includes("second half result") || cat.includes("2nd half result")) {
+      if (sel === "1" || sel === "home") add("2h_1x2_home");
+      else if (sel === "x" || sel === "draw") add("2h_1x2_draw");
+      else if (sel === "2" || sel === "away") add("2h_1x2_away");
   }
-
-  if (c === "Corners 1X2" || c === "Corner Match Bet") {
-    if (sl === "home" || sl === "1") add("corners_1x2_home");
-    if (sl === "draw" || sl === "x") add("corners_1x2_draw");
-    if (sl === "away" || sl === "2") add("corners_1x2_away");
+  // Goals O/U
+  else if (cat.includes("over/under") || cat.includes("goals")) {
+     const match = selection.match(/(Over|Under)\s+([\d.]+)/i);
+     if (match) {
+         const type = match[1].toLowerCase();
+         const line = match[2];
+         if (cat.includes("1st") || cat.includes("half time")) add(`ht_goals_${type}_${line}`);
+         else if (cat.includes("2nd") || cat.includes("second")) add(`2h_goals_${type}_${line}`);
+         else add(`ft_goals_${type}_${line}`);
+     }
   }
-
-  // Clean Sheet
-  if (c === "Clean Sheet - Home") {
-    if (sl === "yes") add("cs_home_yes");
-    if (sl === "no") add("cs_home_no");
+  // Corners (Legacy + New Support)
+  else if (cat.includes("corner")) {
+      const match = selection.match(/(Over|Under)\s+([\d.]+)/i);
+      if (match) {
+          const type = match[1].toLowerCase();
+          const line = match[2];
+          add(`corners_${type}_${line}`);       // Legacy
+          add(`corners_ou_${type}_${line}`);    // New
+      }
+      else if (cat.includes("1x2") || sel.includes("home") || sel.includes("draw")) {
+           if (sel.includes("home") || sel === "1") add("corners_1x2_home");
+           if (sel.includes("draw") || sel === "x") add("corners_1x2_draw");
+           if (sel.includes("away") || sel === "2") add("corners_1x2_away");
+      }
   }
-  if (c === "Clean Sheet - Away") {
-    if (sl === "yes") add("cs_away_yes");
-    if (sl === "no") add("cs_away_no");
+  // Cards
+  else if (cat.includes("card")) {
+      const match = selection.match(/(Over|Under)\s+([\d.]+)/i);
+      if (match) {
+          const type = match[1].toLowerCase();
+          const line = match[2];
+          add(`cards_ou_${type}_${line}`);
+      }
   }
-
-  // Win to Nil
-  if (c === "Win To Nil") {
-    if (sl === "1" || sl === "home") add("win_to_nil_home");
-    if (sl === "2" || sl === "away") add("win_to_nil_away");
+  // HT/2H BTTS
+  else if (cat.includes("both teams to score")) {
+      const side = sel === "yes" ? "yes" : "no";
+      if (cat.includes("1st") || cat.includes("half time")) add(`ht_btts_${side}`);
+      if (cat.includes("2nd") || cat.includes("second")) add(`2h_btts_${side}`);
   }
 
   return keys;
 }
 
-// --- 7. Aggregation & Merging ---
+// Regex Mappings for Flat Odds
+const FLAT_REGEX_MAP = [
+  // Corners (Dual Key Generation)
+  { pattern: /^odds_corners_over_(\d+)$/, map: (m) => [`corners_ou_over_${m[1]/10}`, `corners_over_${m[1]/10}`] },
+  { pattern: /^odds_corners_under_(\d+)$/, map: (m) => [`corners_ou_under_${m[1]/10}`, `corners_under_${m[1]/10}`] },
+  // Goals
+  { pattern: /^odds_ft_over(\d+)$/, map: (m) => [`ft_goals_over_${m[1]/10}`] },
+  { pattern: /^odds_ft_under(\d+)$/, map: (m) => [`ft_goals_under_${m[1]/10}`] },
+  { pattern: /^odds_1st_half_over(\d+)$/, map: (m) => [`ht_goals_over_${m[1]/10}`] },
+  { pattern: /^odds_1st_half_under(\d+)$/, map: (m) => [`ht_goals_under_${m[1]/10}`] },
+  { pattern: /^odds_2nd_half_over(\d+)$/, map: (m) => [`2h_goals_over_${m[1]/10}`] },
+  { pattern: /^odds_2nd_half_under(\d+)$/, map: (m) => [`2h_goals_under_${m[1]/10}`] },
+];
 
-const bestOdds = {};
-const flatSources = {};
-const comparisonSources = {};
-let usedLegacyKeys = false;
+const FLAT_ODDS_MAP_SIMPLE = {
+    "odds_ft_1": "ft_1x2_home", "odds_ft_x": "ft_1x2_draw", "odds_ft_2": "ft_1x2_away",
+    "odds_btts_yes": "btts_yes", "odds_btts_no": "btts_no",
+    "odds_double_chance_1x": "dc_1x", "odds_double_chance_12": "dc_12", "odds_double_chance_2x": "dc_x2"
+};
 
-// Process Flat Odds
-for (const key of Object.keys(raw)) {
-  if (key.startsWith("odds_")) {
-    const marketMaps = flatKeyToMarketKeys(key); // Fix: Correct function name
-    const val = raw[key];
-    
-    if (!isValidOdds(val)) {
-      if (val !== 0 && val !== -1) qa.markets_skipped_invalid++;
-      continue;
-    }
-
-    if (marketMaps.length > 0) {
-        marketMaps.forEach(m => {
-            const entry = { odds: Number(val), book: "internal", source: "flat" };
-            flatSources[m.key] = entry;
-            if (m.isLegacy) usedLegacyKeys = true;
-        });
-    } else {
-      qa.warnings.push(`Flat odds unmapped: ${key}`);
-    }
-  }
-}
-
-// Process Comparison Odds
-const { odds_comparison } = raw;
-if (odds_comparison) {
-  for (const [category, selections] of Object.entries(odds_comparison)) {
-    for (const [selection, books] of Object.entries(selections)) {
-      const marketMaps = toMarketKeys(category, selection);
-      
-      if (marketMaps.length === 0) {
-        // Only warn if category seems relevant (simple heuristic)
-        if (!category.includes(" handicap")) qa.warnings.push(`Comparison unmapped: ${category} -> ${selection}`);
-        continue;
-      }
-
-      let bestOdd = 0;
-      let bestBook = "";
-
-      for (const [book, valStr] of Object.entries(books)) {
-        if (!isValidOdds(valStr)) continue;
-        const val = Number(valStr);
-        if (val > bestOdd) {
-          bestOdd = val;
-          bestBook = book;
+function flatKeyToMarketKeys(flatKey) {
+  const results = [];
+  if (FLAT_ODDS_MAP_SIMPLE[flatKey]) {
+      results.push(normalizeKey(FLAT_ODDS_MAP_SIMPLE[flatKey]));
+  } else {
+      for (const r of FLAT_REGEX_MAP) {
+        const match = flatKey.match(r.pattern);
+        if (match) {
+            const mapped = r.map(match);
+            mapped.forEach(k => results.push(normalizeKey(k)));
+            break;
         }
       }
+  }
+  return results;
+}
 
-      if (bestOdd > 1.0) {
-          marketMaps.forEach(m => {
-              const entry = { odds: bestOdd, book: bestBook, source: "comparison" };
-              comparisonSources[m.key] = entry;
-              if (m.isLegacy) usedLegacyKeys = true;
-          });
-      }
+// --- 5. Logic Execution ---
+
+const bestOdds = {};
+const flatSources = [];
+const comparisonSources = [];
+
+// A. Process Flat Odds (Defensive Loop)
+if (raw && typeof raw === 'object') {
+    for (const key of Object.keys(raw)) {
+        if (key.startsWith("odds_")) {
+            const marketKeys = flatKeyToMarketKeys(key);
+            const val = raw[key];
+
+            if (!isValidOdds(val)) {
+                if (val !== 0 && val !== -1) qa.markets_skipped_invalid++;
+                continue;
+            }
+
+            const oddVal = parseFloat(val);
+            marketKeys.forEach(mKey => {
+                if (!bestOdds[mKey]) {
+                    bestOdds[mKey] = {
+                        odds: oddVal,
+                        book: "internal",
+                        source: "flat",
+                        picked_from: { flatKey: key }
+                    };
+                    qa.markets_total++;
+                    flatSources.push(mKey);
+                }
+            });
+        }
     }
-  }
 }
 
-// Merge Best Odds
-const allKeys = new Set([...Object.keys(flatSources), ...Object.keys(comparisonSources)]);
+// B. Process Comparison Odds (If available)
+const odds_comparison = raw.odds_comparison;
+if (odds_comparison && typeof odds_comparison === 'object') {
+    for (const [category, selections] of Object.entries(odds_comparison)) {
+        if (!selections || typeof selections !== 'object') continue;
 
-for (const key of allKeys) {
-  const flat = flatSources[key];
-  const comp = comparisonSources[key];
+        for (const [selection, books] of Object.entries(selections)) {
+            const marketKeys = toMarketKeys(category, selection);
+            if (marketKeys.length === 0) continue;
 
-  if (flat && comp) {
-    bestOdds[key] = (flat.odds >= comp.odds) ? flat : comp;
-    qa.markets_merged.push(key);
-  } else if (flat) {
-    bestOdds[key] = flat;
-    qa.markets_from_flat_only.push(key);
-  } else if (comp) {
-    bestOdds[key] = comp;
-    qa.markets_from_comparison_only.push(key);
-  }
+            // Find best bookmaker
+            let maxOdd = 0;
+            let bestBook = "";
+
+            if (books && typeof books === 'object') {
+                for (const [book, val] of Object.entries(books)) {
+                    const fVal = parseFloat(val);
+                    if (isValidOdds(fVal) && fVal > maxOdd) {
+                        maxOdd = fVal;
+                        bestBook = book;
+                    }
+                }
+            }
+
+            if (maxOdd > 0) {
+                marketKeys.forEach(mKey => {
+                    // Update Best Odds (Comparison usually overrides Flat)
+                    if (!bestOdds[mKey] || maxOdd > bestOdds[mKey].odds) {
+                         bestOdds[mKey] = {
+                            odds: maxOdd,
+                            book: bestBook,
+                            source: "comparison",
+                            picked_from: { category, selection }
+                        };
+                        qa.markets_total++;
+                        comparisonSources.push(mKey);
+                    }
+                });
+            }
+        }
+    }
 }
 
-qa.markets_total = Object.keys(bestOdds).length;
-if (usedLegacyKeys) qa.warnings.push("deprecated_corner_keys_used");
+// C. Construct Output
+// Grouping logic
+const oddsGroups = {};
+Object.keys(bestOdds).forEach(key => {
+    // Basic grouping heuristic
+    const parts = key.split('_');
+    const groupKey = parts.slice(0, 2).join('_'); // e.g. ft_1x2, corners_ou
+    if (!oddsGroups[groupKey]) oddsGroups[groupKey] = [];
+    oddsGroups[groupKey].push(key);
+});
 
-const oddsGroups = generateGroups(bestOdds);
-
-// --- 8. Signals & Extraction ---
-
-const {
-  homeID, awayID, date_unix, season, roundID, game_week,
-  home_name, away_name, status, stadium_name, home_image, away_image,
-  pre_match_home_ppg, pre_match_away_ppg,
-  team_a_xg_prematch, team_b_xg_prematch, total_xg_prematch,
-  home_ppg, away_ppg, h2h
-} = raw;
-
+// Signals Extraction (Safe)
 const signals = {
-  ppg: {
-    home: Number(pre_match_home_ppg || home_ppg || 0),
-    away: Number(pre_match_away_ppg || away_ppg || 0)
-  },
-  xg: {
-    home: Number(team_a_xg_prematch || 0),
-    away: Number(team_b_xg_prematch || 0),
-    total: Number(total_xg_prematch || 0)
-  },
-  potentials: {} 
-};
-
-// QA Signals
-if (!signals.ppg.home) qa.warnings.push("missing_ppg_home");
-if (!signals.ppg.away) qa.warnings.push("missing_ppg_away");
-if (!signals.xg.home) qa.warnings.push("missing_xg_home");
-if (!signals.xg.away) qa.warnings.push("missing_xg_away");
-
-// Potentials
-for (const key of Object.keys(raw)) {
-  if (key.endsWith("_potential")) {
-    const prob = normalizePercent(raw[key]);
-    if (prob !== null) signals.potentials[key] = prob;
-  }
-}
-
-// H2H
-let h2hClean = null;
-if (h2h) {
-  h2hClean = {
-    summary: {
-      matches_total: h2h.previous_matches_results?.totalMatches || 0,
-      home_wins: h2h.previous_matches_results?.team_a_wins || 0,
-      away_wins: h2h.previous_matches_results?.team_b_wins || 0,
-      draws: h2h.previous_matches_results?.draw || 0,
-      p_home_win: normalizePercent(h2h.previous_matches_results?.team_a_win_percent),
-      p_away_win: normalizePercent(h2h.previous_matches_results?.team_b_win_percent),
-      avg_goals: h2h.betting_stats?.avg_goals || null,
-      p_over05: normalizePercent(h2h.betting_stats?.over05Percentage),
-      p_over15: normalizePercent(h2h.betting_stats?.over15Percentage),
-      p_over25: normalizePercent(h2h.betting_stats?.over25Percentage),
-      p_btts: normalizePercent(h2h.betting_stats?.bttsPercentage),
+    ppg: {
+        home: Number(raw.home_ppg || raw.stats?.seasonPPG_home || 0),
+        away: Number(raw.away_ppg || raw.stats?.seasonPPG_away || 0)
     },
-    history_snippet: h2h.previous_matches_ids ? h2h.previous_matches_ids.slice(0, 5) : []
-  };
-}
-
-// Check QA Status
-if (qa.warnings.length > 0) qa.status = "warning";
-if (qa.errors.length > 0) qa.status = "soft_error"; // Override warning
-
-// --- 9. Final Output ---
-const outputItem = {
-  match_id: matchId,
-  meta: {
-    season,
-    round_id: roundID,
-    game_week,
-    date_unix,
-    status
-  },
-  teams: {
-    home: { id: homeID, name: home_name, image: home_image },
-    away: { id: awayID, name: away_name, image: away_image }
-  },
-  context: {
-    stadium: stadium_name,
-    home_ppg: signals.ppg.home,
-    away_ppg: signals.ppg.away,
-    team_a_xg_prematch: signals.xg.home,
-    team_b_xg_prematch: signals.xg.away,
-    total_xg_prematch: signals.xg.total,
-    ...signals.potentials
-  },
-  signals: signals,
-  odds: {
-    best: bestOdds,
-    groups: oddsGroups, 
-    sources: {
-      flat: flatSources,
-      comparison: comparisonSources
-    }
-  },
-  h2h: h2hClean,
-  qa
+    xg: {
+        home: Number(raw.team_a_xg_prematch || 0),
+        away: Number(raw.team_b_xg_prematch || 0),
+        total: Number(raw.total_xg_prematch || 0)
+    },
+    potentials: raw.potentials || {}
 };
 
-return [ { json: outputItem } ];
+// Final Item Construction
+const outputItem = {
+    match_id: matchId,
+    meta: raw.meta || {},
+    teams: raw.teams || { home: {}, away: {} },
+    context: {
+        home_ppg: signals.ppg.home,
+        away_ppg: signals.ppg.away,
+        team_a_xg_prematch: signals.xg.home,
+        team_b_xg_prematch: signals.xg.away,
+        total_xg_prematch: signals.xg.total,
+        ...signals.potentials,
+        // CRITICAL FIX: Ensure signals object is present in context
+        signals: signals,
+        _meta: {
+            lambda_source_ppg: signals.ppg.home ? 'present' : 'missing',
+            lambda_source_xg: signals.xg.home ? 'present' : 'missing'
+        }
+    },
+    // Keep top-level signals for legacy compatibility
+    signals: signals,
+    odds: {
+        best: bestOdds,
+        groups: oddsGroups,
+        sources: {
+            flat: flatSources,
+            comparison: comparisonSources
+        }
+    },
+    // Pass through heavy stats objects if present
+    team_stats: raw.team_stats,
+    h2h: raw.h2h,
+    qa: qa
+};
+
+return [{ json: outputItem }];
